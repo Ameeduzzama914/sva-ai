@@ -291,7 +291,7 @@ export const ChatLayout = () => {
                 <article className="response-card" key={modelName}>
                   <div className="row-space">
                     <strong>{modelName}</strong>
-                    <span className="badge">{source?.source === "fallback_generated" ? "Fallback" : "Live"}</span>
+                    <span className="badge">{source?.source === "fallback_generated" ? "Demo/Fallback" : "Live"}</span>
                   </div>
                   <p>{response?.answer ?? "No response yet."}</p>
                   <button className="menu-ghost" type="button" onClick={() => setShowDetails((v: boolean) => !v)}>
