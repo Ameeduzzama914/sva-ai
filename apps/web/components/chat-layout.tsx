@@ -3,6 +3,7 @@
 import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   STARTER_PROMPT,
+  type EvidenceSnippet,
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
@@ -44,9 +45,10 @@ export const ChatLayout = () => {
   const [user, setUser] = useState<UserSession | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [prompt, setPrompt] = useState(STARTER_PROMPT);
-  const [mode] = useState<VerificationMode>("fast");
+  const [mode, setMode] = useState<VerificationMode>("fast");
   const [responses, setResponses] = useState<ModelResponse[]>([]);
   const [modelSources, setModelSources] = useState<PerModelSource[]>([]);
+  const [evidenceSnippets, setEvidenceSnippets] = useState<EvidenceSnippet[]>([]);
   const [verification, setVerification] = useState<VerificationResult | null>(null);
   const [meta, setMeta] = useState<VerificationExecutionMeta | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,6 +127,7 @@ export const ChatLayout = () => {
     setIsLoading(true);
     setErrorMessage(null);
     setVerification(null);
+    setEvidenceSnippets([]);
 
     try {
       const response = await fetch("/api/verify", {
@@ -139,6 +142,7 @@ export const ChatLayout = () => {
       }
       setResponses(data.responses);
       setModelSources(data.modelSources);
+      setEvidenceSnippets(data.evidenceSnippets);
       setVerification(data.verification);
       setMeta(data.meta);
       await Promise.all([loadHistory(), loadSession()]);
@@ -217,9 +221,15 @@ export const ChatLayout = () => {
               Usage: {user.usedToday}/{user.dailyLimit}
             </p>
             {user.plan === "free" ? (
-              <button className="menu-button" type="button" onClick={handleUpgrade}>
-                Upgrade Pro ₹499/mo
-              </button>
+              <div className="upgrade-card">
+                <p>
+                  <strong>Pro Early Access: ₹499/month</strong>
+                </p>
+                <p className="muted-line">Will increase to ₹999 soon</p>
+                <button className="menu-button" type="button" onClick={handleUpgrade}>
+                  Upgrade Pro
+                </button>
+              </div>
             ) : null}
             <button className="menu-ghost" type="button" onClick={handleLogout}>
               Logout
@@ -232,7 +242,7 @@ export const ChatLayout = () => {
 
       <main className="minimal-main">
         <header className="header-block">
-          <h2>New Query</h2>
+          <h2>Verify AI answers before you trust them.</h2>
           <p>Ask any question. SVA compares AI answers and verifies the truth.</p>
         </header>
 
@@ -254,6 +264,18 @@ export const ChatLayout = () => {
               <button className="run-button" type="submit" disabled={isLoading || !user}>
                 {isLoading ? "Running..." : "Run"}
               </button>
+            </div>
+            <div className="chip-row">
+              {(["fast", "deep", "research"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={mode === option ? "chip mode-chip active-mode" : "chip mode-chip"}
+                  onClick={() => setMode(option)}
+                >
+                  {option === "fast" ? "Fast" : option === "deep" ? "Deep Verify" : "Research"}
+                </button>
+              ))}
             </div>
           </form>
           {errorMessage ? <p className="error-line">{errorMessage}</p> : null}
@@ -293,6 +315,13 @@ export const ChatLayout = () => {
                   <strong>{confidenceLabel(verification.finalConfidenceScore)}</strong>
                 </p>
                 <p className="muted-line">{verification.explanation}</p>
+                {verification.judgeRiskFlags && verification.judgeRiskFlags.length > 0 ? (
+                  <ul className="risk-list">
+                    {verification.judgeRiskFlags.map((flag: string, idx: number) => (
+                      <li key={`${flag}-${idx}`}>⚠️ {flag}</li>
+                    ))}
+                  </ul>
+                ) : null}
                 <button className="menu-ghost" type="button" onClick={() => setShowDetails((v: boolean) => !v)}>
                   See Details
                 </button>
@@ -329,9 +358,58 @@ export const ChatLayout = () => {
             <p>
               Trust breakdown — Agreement {verification.agreementScore}, Evidence {verification.evidenceAlignmentScore}, Source Quality {verification.sourceQualityScore ?? 0}, Contradiction Impact {verification.contradictionPenalty ?? 0}
             </p>
+            {verification.whyNotHigher ? <p className="muted-line">Why not higher: {verification.whyNotHigher}</p> : null}
             {meta ? <p className="muted-line">Retrieval mode: {meta.retrievalModeUsed}</p> : null}
+            <details>
+              <summary>Raw responses</summary>
+              <div className="history-list">
+                {responses.map((response: ModelResponse) => (
+                  <article key={response.model} className="history-item">
+                    <strong>{response.model}</strong>
+                    <p>{response.answer}</p>
+                  </article>
+                ))}
+              </div>
+            </details>
           </section>
         ) : null}
+
+        <section className="grid-two">
+          <section className="panel">
+            <h3>Evidence support</h3>
+            {evidenceSnippets.length > 0 ? (
+              <div className="history-list">
+                {evidenceSnippets.map((snippet: EvidenceSnippet, idx: number) => (
+                  <article className="history-item" key={`${snippet.title}-${idx}`}>
+                    <strong>{snippet.title}</strong>
+                    <small>{snippet.sourceType}</small>
+                    <p>{snippet.text}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="muted-line">No evidence snippets available.</p>
+            )}
+          </section>
+          <section className="panel">
+            <h3>Claim-level verification</h3>
+            {verification?.claimVerifications?.length ? (
+              <div className="history-list">
+                {verification.claimVerifications.map((claim: VerificationResult["claimVerifications"][number]) => (
+                  <article key={claim.id} className="history-item">
+                    <strong>{claim.claim}</strong>
+                    <small>
+                      {claim.status} • {claim.confidenceScore}/100
+                    </small>
+                    <p>{claim.explanation}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="muted-line">No claim-level data yet.</p>
+            )}
+          </section>
+        </section>
 
         <section className="panel">
           <h3>History</h3>

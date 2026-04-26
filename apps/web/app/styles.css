@@ -87,6 +87,16 @@ body { margin: 0; background: #080b12; }
   font-size: 0.78rem;
 }
 
+.mode-chip {
+  cursor: pointer;
+}
+
+.active-mode {
+  border-color: #8b5cf6;
+  color: #f0e8ff;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.35) inset;
+}
+
 .panel h3 { margin-top: 0; }
 .response-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
 
@@ -125,6 +135,21 @@ progress { width: 100%; }
 
 .history-list { display: grid; gap: 0.55rem; }
 .history-item { text-align: left; color: #e0e8ff; }
+
+.upgrade-card {
+  border: 1px solid #394a69;
+  border-radius: 10px;
+  background: #0f182a;
+  padding: 0.65rem;
+}
+
+.risk-list {
+  margin: 0.4rem 0 0.8rem;
+  padding-left: 1.1rem;
+  color: #f3d59a;
+  display: grid;
+  gap: 0.35rem;
+}
 
 .error-line { color: #fca5a5; margin-top: 0.65rem; }
 .muted-line { color: #9bb0d8; font-size: 0.85rem; }
