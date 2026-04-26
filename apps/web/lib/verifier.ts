@@ -1,4 +1,4 @@
-import { claudeProvider, deepseekProvider, geminiProvider, openAIProvider } from "./providers";
+import { claudeProvider, deepseekProvider, geminiProvider, openAIProvider, perplexityProvider } from "./providers";
 import {
   type ClaimVerification,
   type EvidenceSnippet,
@@ -546,7 +546,12 @@ const verifyClaims = (
 
 type LiveProviderEntry = {
   model: ModelName;
-  provider: typeof openAIProvider | typeof claudeProvider | typeof geminiProvider | typeof deepseekProvider;
+  provider:
+    | typeof openAIProvider
+    | typeof claudeProvider
+    | typeof geminiProvider
+    | typeof deepseekProvider
+    | typeof perplexityProvider;
 };
 
 export const buildResponsesForPrompt = async (
@@ -565,17 +570,19 @@ export const buildResponsesForPrompt = async (
   }));
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
 
-  const [gptPrimary, claudePrimary, geminiPrimary, deepseekPrimary] = await Promise.all([
+  const [gptPrimary, claudePrimary, geminiPrimary, deepseekPrimary, perplexityPrimary] = await Promise.all([
     openAIProvider.generate({ prompt: contextPrompt }),
     claudeProvider.generate({ prompt: contextPrompt }),
     geminiProvider.generate({ prompt: contextPrompt }),
-    deepseekProvider.generate({ prompt: contextPrompt })
+    deepseekProvider.generate({ prompt: contextPrompt }),
+    perplexityProvider.generate({ prompt: contextPrompt })
   ]);
 
   let gptAnswer = gptPrimary.ok ? gptPrimary.text : "";
   let claudeAnswer = claudePrimary.ok ? claudePrimary.text : "";
   let geminiAnswer = geminiPrimary.ok ? geminiPrimary.text : "";
   let deepseekAnswer = deepseekPrimary.ok ? deepseekPrimary.text : "";
+  let perplexityAnswer = perplexityPrimary.ok ? perplexityPrimary.text : "";
 
   const gptSource: PerModelSource = {
     model: "GPT",
@@ -601,11 +608,18 @@ export const buildResponsesForPrompt = async (
     fallbackState: deepseekPrimary.ok ? "none" : mapFallback(deepseekPrimary)
   };
 
+  const perplexitySource: PerModelSource = {
+    model: "Perplexity",
+    source: perplexityPrimary.ok ? "real_provider" : "fallback_generated",
+    fallbackState: perplexityPrimary.ok ? "none" : mapFallback(perplexityPrimary)
+  };
+
   const liveProviders: LiveProviderEntry[] = [
     gptPrimary.ok ? { model: "GPT", provider: openAIProvider } : null,
     claudePrimary.ok ? { model: "Claude", provider: claudeProvider } : null,
     geminiPrimary.ok ? { model: "Gemini", provider: geminiProvider } : null,
-    deepseekPrimary.ok ? { model: "DeepSeek", provider: deepseekProvider } : null
+    deepseekPrimary.ok ? { model: "DeepSeek", provider: deepseekProvider } : null,
+    perplexityPrimary.ok ? { model: "Perplexity", provider: perplexityProvider } : null
   ].filter((entry): entry is LiveProviderEntry => Boolean(entry));
 
   const generateViaAlternateLiveProvider = async (
@@ -660,21 +674,30 @@ export const buildResponsesForPrompt = async (
     }
   }
 
+  if (!perplexityPrimary.ok) {
+    perplexityAnswer = (await generateViaAlternateLiveProvider("Perplexity", ["Perplexity"])) ?? "";
+    if (!perplexityAnswer) {
+      perplexityAnswer = hardFallback("Perplexity", prompt);
+    }
+  }
+
   const modelSources: PerModelSource[] = [
     gptSource,
     claudeSource,
     geminiSource,
-    deepseekSource
+    deepseekSource,
+    perplexitySource
   ];
 
   const responses: ModelResponse[] = [
     { model: "GPT", answer: gptAnswer },
     { model: "Claude", answer: claudeAnswer },
     { model: "Gemini", answer: geminiAnswer },
-    { model: "DeepSeek", answer: deepseekAnswer }
+    { model: "DeepSeek", answer: deepseekAnswer },
+    { model: "Perplexity", answer: perplexityAnswer }
   ];
 
-  const usedRealProvider = gptPrimary.ok || claudePrimary.ok || geminiPrimary.ok || deepseekPrimary.ok;
+  const usedRealProvider = gptPrimary.ok || claudePrimary.ok || geminiPrimary.ok || deepseekPrimary.ok || perplexityPrimary.ok;
 
   const providerMessageParts = [
     gptPrimary.ok ? "GPT: live" : `GPT: fallback (${gptPrimary.message})`,
@@ -684,7 +707,8 @@ export const buildResponsesForPrompt = async (
       ? "DeepSeek: live"
       : deepseekGenerated?.ok
         ? "DeepSeek: synthetic from live provider"
-        : `DeepSeek: fallback (${deepseekPrimary.message})`
+        : `DeepSeek: fallback (${deepseekPrimary.message})`,
+    perplexityPrimary.ok ? "Perplexity: live" : `Perplexity: fallback (${perplexityPrimary.message})`
   ];
 
   return {
@@ -698,6 +722,7 @@ export const buildResponsesForPrompt = async (
       claudeSource: claudePrimary.ok ? "claude" : "fallback",
       geminiSource: geminiPrimary.ok ? "gemini" : "fallback",
       deepseekSource: deepseekPrimary.ok ? "deepseek" : "fallback",
+      perplexitySource: perplexityPrimary.ok ? "perplexity" : "fallback",
       providerMessage: providerMessageParts.join(" | "),
       retrievalModeUsed: retrievalResult.retrievalModeUsed,
       retrievalSourceCount: evidenceSnippets.length,

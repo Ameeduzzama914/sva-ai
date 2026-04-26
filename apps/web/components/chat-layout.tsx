@@ -31,8 +31,8 @@ type UserSession = {
   onboardingCompleted: boolean;
 };
 
-const modelChips = ["GPT-4o", "Claude 3.5", "Gemini 1.5 Pro", "Add Model"];
-const visibleResponseModels = ["GPT", "Claude", "Gemini"] as const;
+const modelChips = ["GPT-4o", "Claude 3.5", "Gemini 1.5 Pro", "DeepSeek", "Perplexity Sonar"];
+const visibleResponseModels = ["GPT", "Claude", "Gemini", "DeepSeek", "Perplexity"] as const;
 
 const confidenceLabel = (score: number): string => {
   if (score >= 75) return "High Confidence";
