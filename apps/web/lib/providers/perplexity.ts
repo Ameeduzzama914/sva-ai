@@ -1,6 +1,6 @@
 import type { ProviderGenerateInput, ProviderResponse, TextProvider } from "./types";
 
-const PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions";
+const PERPLEXITY_URL = "https://api.perplexity.ai/v1/sonar";
 const REQUEST_TIMEOUT_MS = 10_000;
 
 const extractPerplexityText = (payload: unknown): string | null => {
@@ -26,26 +26,12 @@ const extractPerplexityText = (payload: unknown): string | null => {
   }
 
   const content = (message as Record<string, unknown>).content;
-  if (typeof content === "string") {
-    const trimmed = content.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-
-  if (!Array.isArray(content)) {
+  if (typeof content !== "string") {
     return null;
   }
 
-  const chunks = content
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return "";
-      }
-      const text = (item as Record<string, unknown>).text;
-      return typeof text === "string" ? text.trim() : "";
-    })
-    .filter((text) => text.length > 0);
-
-  return chunks.length > 0 ? chunks.join("\n").trim() : null;
+  const trimmed = content.trim();
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 export class PerplexityProvider implements TextProvider {
