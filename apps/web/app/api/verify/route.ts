@@ -9,6 +9,22 @@ interface VerifyRequestBody {
   mode?: VerificationMode;
 }
 
+const withTimeout = async <T>(promise: Promise<T>, ms = 18000): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Verification timed out.")), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser();
 
@@ -42,8 +58,33 @@ export async function POST(request: Request) {
       await trackEvent("verification_started", user.userId, { mode });
     }
 
-    const providerFlow = await buildResponsesForPrompt(prompt, mode);
-    const verification = verifyResponses(providerFlow.responses, providerFlow.modelSources, providerFlow.evidenceSnippets, mode);
+    const providerFlow = await withTimeout(buildResponsesForPrompt(prompt, mode), 18000);
+    const safeEvidenceSnippets =
+      providerFlow.evidenceSnippets.length > 0
+        ? providerFlow.evidenceSnippets
+        : [
+            {
+              title: "Fallback Evidence Notice",
+              text: "No external evidence could be retrieved. Confidence is based mainly on model agreement, so the result should be treated cautiously.",
+              sourceType: "mock_web" as const,
+              sourceId: "fallback-evidence-notice",
+              relevanceScore: 35,
+              sourceQualityScore: 45
+            }
+          ];
+    const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
+
+    if (validResponses.length < 2) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "Not enough valid AI responses were returned. Please try again."
+        } as VerifyApiError,
+        { status: 500 }
+      );
+    }
+
+    const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, mode);
 
     let usage = {
       plan: (user?.plan ?? "free") as "free" | "pro",
@@ -92,7 +133,7 @@ export async function POST(request: Request) {
       verification,
       responses: providerFlow.responses,
       modelSources: providerFlow.modelSources,
-      evidenceSnippets: providerFlow.evidenceSnippets,
+      evidenceSnippets: safeEvidenceSnippets,
       meta: providerFlow.meta,
       usage
     };
