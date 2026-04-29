@@ -1,4 +1,4 @@
-export type ModelName = "GPT" | "Claude" | "Gemini" | "DeepSeek";
+export type ModelName = "GPT" | "Claude" | "Gemini" | "DeepSeek" | "Perplexity";
 
 export type ModelAnswerSource = "real_provider" | "fallback_generated";
 
@@ -85,10 +85,12 @@ export interface VerificationExecutionMeta {
   claudeSource: "claude" | "fallback";
   geminiSource: "gemini" | "fallback";
   deepseekSource: "deepseek" | "fallback";
+  perplexitySource?: "perplexity" | "fallback";
   providerMessage: string;
   retrievalModeUsed: "mock" | "web";
   retrievalSourceCount: number;
   retrievalFallbackToMock: boolean;
+  responseQualityFlag?: "normal" | "low_response_count";
 }
 
 export interface VerifyApiSuccess {
@@ -98,6 +100,7 @@ export interface VerifyApiSuccess {
   modelSources: PerModelSource[];
   evidenceSnippets: EvidenceSnippet[];
   meta: VerificationExecutionMeta;
+  warnings?: string[];
   usage?: {
     plan: "free" | "pro";
     usedToday: number;

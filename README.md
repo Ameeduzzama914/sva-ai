@@ -42,5 +42,22 @@ This is intentionally a lean v1 for first paying users and rapid validation.
 cd apps/web
 cp .env.example .env.local
 npm install
+npm run build
 npm run dev
 ```
+
+## Required environment variables
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GEMINI_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `PERPLEXITY_API_KEY`
+- `RETRIEVAL_PROVIDER` (`mock` for demo, `web` for real retrieval)
+- `WEB_RETRIEVAL_ENDPOINT` (for web retrieval mode)
+- `WEB_RETRIEVAL_API_KEY` (for web retrieval mode)
+
+## Vercel build settings
+- **Root Directory:** `.`
+- **Framework Preset:** `Next.js`
+- **Build Command:** `cd apps/web && npm install && npm run build`
+- **Environment recommendation:** set `RETRIEVAL_PROVIDER=mock` for demo deployments, or `web` when Serper is configured.

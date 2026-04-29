@@ -54,6 +54,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 
 const defaultStore: AppStore = { users: [], analytics: [] };
+let writeQueue: Promise<void> = Promise.resolve();
 
 const hashPassword = (password: string): string => {
   const salt = randomUUID();
@@ -82,12 +83,17 @@ const ensureStore = async (): Promise<void> => {
 
 const readStore = async (): Promise<AppStore> => {
   await ensureStore();
-  const raw = await readFile(STORE_PATH, "utf8");
-  const parsed = JSON.parse(raw) as Partial<AppStore>;
-  return {
-    users: Array.isArray(parsed.users) ? parsed.users : [],
-    analytics: Array.isArray(parsed.analytics) ? parsed.analytics : []
-  };
+  try {
+    const raw = await readFile(STORE_PATH, "utf8");
+    const parsed = JSON.parse(raw) as Partial<AppStore>;
+    return {
+      users: Array.isArray(parsed.users) ? parsed.users : [],
+      analytics: Array.isArray(parsed.analytics) ? parsed.analytics : []
+    };
+  } catch {
+    await saveStore(defaultStore);
+    return { ...defaultStore };
+  }
 };
 
 const saveStore = async (store: AppStore): Promise<void> => {
@@ -95,28 +101,44 @@ const saveStore = async (store: AppStore): Promise<void> => {
   await writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
 };
 
-export const createUser = async (email: string, password: string): Promise<StoredUser | null> => {
-  const normalizedEmail = email.trim().toLowerCase();
-  const store = await readStore();
-  if (store.users.some((user) => user.email === normalizedEmail)) {
-    return null;
+const withWriteLock = async <T>(operation: () => Promise<T>): Promise<T> => {
+  const current = writeQueue;
+  let release: () => void = () => undefined;
+  writeQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await current;
+  try {
+    return await operation();
+  } finally {
+    release();
   }
+};
 
-  const user: StoredUser = {
-    userId: randomUUID(),
-    email: normalizedEmail,
-    passwordHash: hashPassword(password),
-    plan: "free",
-    usageCount: 0,
-    usageByDate: {},
-    createdAt: new Date().toISOString(),
-    history: [],
-    onboardingCompleted: false
-  };
+export const createUser = async (email: string, password: string): Promise<StoredUser | null> => {
+  return withWriteLock(async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const store = await readStore();
+    if (store.users.some((user) => user.email === normalizedEmail)) {
+      return null;
+    }
 
-  store.users.push(user);
-  await saveStore(store);
-  return user;
+    const user: StoredUser = {
+      userId: randomUUID(),
+      email: normalizedEmail,
+      passwordHash: hashPassword(password),
+      plan: "free",
+      usageCount: 0,
+      usageByDate: {},
+      createdAt: new Date().toISOString(),
+      history: [],
+      onboardingCompleted: false
+    };
+
+    store.users.push(user);
+    await saveStore(store);
+    return user;
+  });
 };
 
 export const getUserByEmail = async (email: string): Promise<StoredUser | null> => {
@@ -139,35 +161,41 @@ export const verifyUserCredentials = async (email: string, password: string): Pr
 };
 
 export const upgradeUserToPro = async (userId: string): Promise<StoredUser | null> => {
-  const store = await readStore();
-  const user = store.users.find((entry) => entry.userId === userId);
-  if (!user) {
-    return null;
-  }
-  user.plan = "pro";
-  await saveStore(store);
-  return user;
+  return withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return null;
+    }
+    user.plan = "pro";
+    await saveStore(store);
+    return user;
+  });
 };
 
 export const appendHistoryForUser = async (userId: string, item: UserHistoryItem): Promise<StoredUser | null> => {
-  const store = await readStore();
-  const user = store.users.find((entry) => entry.userId === userId);
-  if (!user) {
-    return null;
-  }
-  user.history = [item, ...user.history].slice(0, 20);
-  await saveStore(store);
-  return user;
+  return withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return null;
+    }
+    user.history = [item, ...user.history].slice(0, 20);
+    await saveStore(store);
+    return user;
+  });
 };
 
 export const markOnboardingCompleted = async (userId: string): Promise<void> => {
-  const store = await readStore();
-  const user = store.users.find((entry) => entry.userId === userId);
-  if (!user) {
-    return;
-  }
-  user.onboardingCompleted = true;
-  await saveStore(store);
+  await withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.onboardingCompleted = true;
+    await saveStore(store);
+  });
 };
 
 export const getUsageForToday = (user: StoredUser): number => {
@@ -176,17 +204,44 @@ export const getUsageForToday = (user: StoredUser): number => {
 };
 
 export const incrementUsageForToday = async (userId: string): Promise<{ usedToday: number; totalUsage: number } | null> => {
-  const store = await readStore();
-  const user = store.users.find((entry) => entry.userId === userId);
-  if (!user) {
-    return null;
-  }
-  const dayKey = new Date().toISOString().slice(0, 10);
-  const next = (user.usageByDate[dayKey] ?? 0) + 1;
-  user.usageByDate[dayKey] = next;
-  user.usageCount += 1;
-  await saveStore(store);
-  return { usedToday: next, totalUsage: user.usageCount };
+  return withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return null;
+    }
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const next = (user.usageByDate[dayKey] ?? 0) + 1;
+    user.usageByDate[dayKey] = next;
+    user.usageCount += 1;
+    await saveStore(store);
+    return { usedToday: next, totalUsage: user.usageCount };
+  });
+};
+
+export const consumeDailyVerificationQuota = async (
+  userId: string
+): Promise<{ ok: true; usedToday: number; dailyLimit: number; plan: UserPlan } | { ok: false; dailyLimit: number; usedToday: number; plan: UserPlan } | null> => {
+  return withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return null;
+    }
+
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const usedToday = user.usageByDate[dayKey] ?? 0;
+    const dailyLimit = getDailyLimit(user.plan);
+    if (usedToday >= dailyLimit) {
+      return { ok: false, dailyLimit, usedToday, plan: user.plan };
+    }
+
+    const next = usedToday + 1;
+    user.usageByDate[dayKey] = next;
+    user.usageCount += 1;
+    await saveStore(store);
+    return { ok: true, usedToday: next, dailyLimit, plan: user.plan };
+  });
 };
 
 export const getDailyLimit = (plan: UserPlan): number => {
@@ -198,18 +253,20 @@ export const trackEvent = async (
   userId?: string,
   metadata?: Record<string, string | number | boolean | null>
 ): Promise<void> => {
-  const store = await readStore();
-  store.analytics = [
-    {
-      id: randomUUID(),
-      userId,
-      event,
-      timestamp: new Date().toISOString(),
-      metadata
-    },
-    ...store.analytics
-  ].slice(0, 2000);
-  await saveStore(store);
+  await withWriteLock(async () => {
+    const store = await readStore();
+    store.analytics = [
+      {
+        id: randomUUID(),
+        userId,
+        event,
+        timestamp: new Date().toISOString(),
+        metadata
+      },
+      ...store.analytics
+    ].slice(0, 2000);
+    await saveStore(store);
+  });
 };
 
 export const getAnalyticsCount = async (): Promise<number> => {
@@ -245,11 +302,13 @@ export const getUserHistory = async (userId: string): Promise<UserHistoryItem[]>
 };
 
 export const clearUserHistory = async (userId: string): Promise<void> => {
-  const store = await readStore();
-  const user = store.users.find((entry) => entry.userId === userId);
-  if (!user) {
-    return;
-  }
-  user.history = [];
-  await saveStore(store);
+  await withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.history = [];
+    await saveStore(store);
+  });
 };

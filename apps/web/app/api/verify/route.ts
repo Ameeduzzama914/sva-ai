@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { type VerificationMode, type VerifyApiError, type VerifyApiSuccess } from "../../../lib/models";
 import { getAuthenticatedUser } from "../../../lib/server/auth";
-import { appendHistoryForUser, getDailyLimit, incrementUsageForToday, trackEvent } from "../../../lib/server/store";
+import { appendHistoryForUser, consumeDailyVerificationQuota, getDailyLimit, trackEvent } from "../../../lib/server/store";
 import { buildResponsesForPrompt, verifyResponses } from "../../../lib/verifier";
 
 interface VerifyRequestBody {
@@ -9,21 +9,24 @@ interface VerifyRequestBody {
   mode?: VerificationMode;
 }
 
+const withTimeout = async <T>(promise: Promise<T>, ms = 18000): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Verification timed out.")), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, message: "Please login to verify." } as VerifyApiError, { status: 401 });
-  }
-
-  if (user.usedToday >= user.dailyLimit) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: `Daily limit reached for ${user.plan} plan (${user.dailyLimit}/day). Upgrade to Pro for higher limits.`
-      } as VerifyApiError,
-      { status: 429 }
-    );
-  }
 
   let body: VerifyRequestBody;
 
@@ -51,36 +54,103 @@ export async function POST(request: Request) {
   }
 
   try {
-    await trackEvent("verification_started", user.userId, { mode });
-    const providerFlow = await buildResponsesForPrompt(prompt, mode);
-    const verification = verifyResponses(providerFlow.responses, providerFlow.modelSources, providerFlow.evidenceSnippets, mode);
-    const usageUpdate = await incrementUsageForToday(user.userId);
-    await appendHistoryForUser(user.userId, {
-      prompt,
-      mode,
-      resultSummary: verification.finalAnswer,
-      timestamp: new Date().toISOString(),
-      confidence: verification.finalConfidenceScore,
-      verdict: verification.judgeVerdict ?? "caution"
-    });
-    await trackEvent("verification_completed", user.userId, {
-      mode,
-      confidence: verification.finalConfidenceScore,
-      verdict: verification.judgeVerdict ?? "caution"
-    });
+    if (user) {
+      await trackEvent("verification_started", user.userId, { mode });
+    }
+
+    const providerFlow = await withTimeout(buildResponsesForPrompt(prompt, mode), 18000);
+    const safeEvidenceSnippets =
+      providerFlow.evidenceSnippets.length > 0
+        ? providerFlow.evidenceSnippets
+        : [
+            {
+              title: "Fallback Evidence Notice",
+              text: "No external evidence could be retrieved. Confidence is based mainly on model agreement, so the result should be treated cautiously.",
+              sourceType: "mock_web" as const,
+              sourceId: "fallback-evidence-notice",
+              relevanceScore: 35,
+              sourceQualityScore: 45
+            }
+          ];
+    const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
+    const responseQualityFlag = validResponses.length < 3 ? "low_response_count" : "normal";
+
+    if (validResponses.length < 2) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "Not enough valid AI responses were returned. Please try again."
+        } as VerifyApiError,
+        { status: 500 }
+      );
+    }
+
+    const adjustedMode = validResponses.length < 3 && mode === "fast" ? "deep" : mode;
+    const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode);
+    const warnings: string[] = [];
+
+    if (validResponses.length < 3) {
+      warnings.push("Low number of valid AI responses. Confidence may be reduced.");
+    }
+
+    if (safeEvidenceSnippets.length === 1 && safeEvidenceSnippets[0].sourceId === "fallback-evidence-notice") {
+      warnings.push("No real external evidence was found.");
+    }
+
+    let usage = {
+      plan: (user?.plan ?? "free") as "free" | "pro",
+      usedToday: user?.usedToday ?? 0,
+      dailyLimit: user?.dailyLimit ?? getDailyLimit("free")
+    };
+
+    if (user) {
+      const quota = await consumeDailyVerificationQuota(user.userId);
+      if (!quota) {
+        return NextResponse.json({ ok: false, message: "User session not found." } as VerifyApiError, { status: 401 });
+      }
+      if (!quota.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: `Daily limit reached for ${quota.plan} plan (${quota.dailyLimit}/day). Upgrade to Pro for higher limits.`
+          } as VerifyApiError,
+          { status: 429 }
+        );
+      }
+
+      await appendHistoryForUser(user.userId, {
+        prompt,
+        mode,
+        resultSummary: verification.finalAnswer,
+        timestamp: new Date().toISOString(),
+        confidence: verification.finalConfidenceScore,
+        verdict: verification.judgeVerdict ?? "caution"
+      });
+      await trackEvent("verification_completed", user.userId, {
+        mode,
+        confidence: verification.finalConfidenceScore,
+        verdict: verification.judgeVerdict ?? "caution"
+      });
+
+      usage = {
+        plan: quota.plan,
+        usedToday: quota.usedToday,
+        dailyLimit: quota.dailyLimit
+      };
+    }
 
     const payload: VerifyApiSuccess = {
       ok: true,
       verification,
-      responses: providerFlow.responses,
+      responses: validResponses,
       modelSources: providerFlow.modelSources,
-      evidenceSnippets: providerFlow.evidenceSnippets,
-      meta: providerFlow.meta,
-      usage: {
-        plan: user.plan,
-        usedToday: usageUpdate?.usedToday ?? user.usedToday + 1,
-        dailyLimit: getDailyLimit(user.plan)
-      }
+      evidenceSnippets: safeEvidenceSnippets,
+      meta: {
+        ...providerFlow.meta,
+        responseQualityFlag
+      },
+      usage,
+      warnings
     };
 
     return NextResponse.json(payload, { status: 200 });
