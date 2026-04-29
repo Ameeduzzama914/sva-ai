@@ -1,0 +1,46 @@
+import type { EvidenceSnippet } from "./models";
+import { MockRetrievalProvider } from "./retrieval-mock";
+import { WebRetrievalProvider } from "./retrieval-web";
+
+export interface RetrievalResult {
+  snippets: EvidenceSnippet[];
+  retrievalModeUsed: "mock" | "web";
+  fallbackToMock: boolean;
+}
+
+export interface RetrievalProvider {
+  retrieve(prompt: string, limit?: number): Promise<RetrievalResult>;
+}
+
+class FallbackRetrievalProvider implements RetrievalProvider {
+  constructor(
+    private readonly primary: RetrievalProvider,
+    private readonly fallback: RetrievalProvider
+  ) {}
+
+  async retrieve(prompt: string, limit = 4): Promise<RetrievalResult> {
+    const primaryResult = await this.primary.retrieve(prompt, limit);
+    if (primaryResult.snippets.length > 0) {
+      return primaryResult;
+    }
+
+    const fallbackResult = await this.fallback.retrieve(prompt, limit);
+    return {
+      ...fallbackResult,
+      fallbackToMock: true
+    };
+  }
+}
+
+const selectRetrievalProvider = (): RetrievalProvider => {
+  const mode = process.env.RETRIEVAL_PROVIDER?.toLowerCase();
+  const mock = new MockRetrievalProvider();
+
+  if (mode === "web") {
+    return new FallbackRetrievalProvider(new WebRetrievalProvider(), mock);
+  }
+
+  return mock;
+};
+
+export const retrievalProvider: RetrievalProvider = selectRetrievalProvider();
