@@ -15,6 +15,7 @@ import {
   type VerificationResult,
   type VerifyApiResponse
 } from "../lib/models";
+import type { ProviderStatus } from "../lib/server/provider-status";
 
 const visibleModels = ["GPT", "Gemini", "DeepSeek"] as const;
 
@@ -38,9 +39,10 @@ export const SaasDashboard = () => {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
 
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
-  const isDemoMode = (meta?.mode === "fallback_only" || (modelSources.length > 0 && modelSources.every((item) => item.source === "fallback_generated"))) && !isLoading;
+  const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
   const contradictionCount = !isDemoMode && verification?.contradictionScore ? Math.max(0, Math.ceil(verification.contradictionScore / 25)) : 0;
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
@@ -78,6 +80,16 @@ export const SaasDashboard = () => {
       setIsLoading(false);
     }
   };
+  useEffect(() => {
+    const loadStatus = async () => {
+      const response = await fetch("/api/provider-status");
+      const data = (await response.json()) as { ok: boolean; status?: ProviderStatus };
+      if (response.ok && data.ok && data.status) {
+        setProviderStatus(data.status);
+      }
+    };
+    void loadStatus();
+  }, []);
 
   const trustScore = verification?.finalConfidenceScore ?? 0;
   const trustLabel =
@@ -120,6 +132,25 @@ export const SaasDashboard = () => {
                   <li>WEB_RETRIEVAL_API_KEY (for web mode)</li>
                 </ul>
               </details>
+            </Card>
+          ) : null}
+          {!isDemoMode && providerStatus ? (
+            <Card className="border-emerald-500/30 bg-emerald-500/10 py-3" title="Live Provider Status">
+              <p className="text-sm text-emerald-100">
+                Live verification enabled — {providerStatus.liveProviderCount} of 3 providers connected.
+              </p>
+              <ul className="mt-2 grid gap-1 text-xs text-emerald-100 sm:grid-cols-2">
+                <li>GPT: {providerStatus.openaiConfigured ? "Connected" : "Not configured"}</li>
+                <li>Gemini: {providerStatus.geminiConfigured ? "Connected" : "Not configured"}</li>
+                <li>DeepSeek: {providerStatus.deepseekConfigured ? "Connected" : "Not configured"}</li>
+                <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
+              </ul>
+              {providerStatus.liveProviderCount === 1 ? (
+                <p className="mt-2 text-xs text-amber-200">Single-provider live mode. Add more providers for stronger cross-model verification.</p>
+              ) : null}
+              {providerStatus.retrievalProvider === "web" && !providerStatus.webRetrievalConfigured ? (
+                <p className="mt-2 text-xs text-amber-200">Web retrieval not configured, using mock retrieval.</p>
+              ) : null}
             </Card>
           ) : null}
 
