@@ -32,7 +32,7 @@ type UserSession = {
   onboardingCompleted: boolean;
 };
 
-const visibleResponseModels = ["GPT", "Claude", "Gemini", "DeepSeek", "Perplexity"] as const;
+const visibleResponseModels: ModelName[] = ["GPT", "Gemini", "DeepSeek"];
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
 
