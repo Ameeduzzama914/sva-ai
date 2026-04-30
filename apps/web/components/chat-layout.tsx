@@ -4,6 +4,7 @@ import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState 
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
+  type ModelName,
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
