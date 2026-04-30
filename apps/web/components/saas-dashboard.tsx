@@ -16,7 +16,7 @@ import {
   type VerifyApiResponse
 } from "../lib/models";
 
-const visibleModels = ["GPT", "Claude", "Gemini", "DeepSeek", "Perplexity"] as const;
+const visibleModels = ["GPT", "Gemini", "DeepSeek"] as const;
 
 const statusStyle: Record<string, string> = {
   supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
@@ -114,11 +114,9 @@ export const SaasDashboard = () => {
                 <summary className="cursor-pointer text-amber-200">Setup helper</summary>
                 <ul className="mt-1 grid gap-1 sm:grid-cols-2">
                   <li>OPENAI_API_KEY</li>
-                  <li>ANTHROPIC_API_KEY</li>
-                  <li>GEMINI_API_KEY</li>
+                                    <li>GEMINI_API_KEY</li>
                   <li>DEEPSEEK_API_KEY</li>
-                  <li>PERPLEXITY_API_KEY</li>
-                  <li>RETRIEVAL_PROVIDER=mock or web</li>
+                                    <li>RETRIEVAL_PROVIDER=mock or web</li>
                   <li>WEB_RETRIEVAL_API_KEY (for web mode)</li>
                 </ul>
               </details>

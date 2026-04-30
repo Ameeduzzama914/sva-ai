@@ -4,6 +4,7 @@ import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState 
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
+  type ModelName,
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
@@ -32,7 +33,7 @@ type UserSession = {
   onboardingCompleted: boolean;
 };
 
-const visibleResponseModels = ["GPT", "Claude", "Gemini", "DeepSeek", "Perplexity"] as const;
+const visibleResponseModels: ModelName[] = ["GPT", "Gemini", "DeepSeek"];
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
 
@@ -245,7 +246,7 @@ export const ChatLayout = () => {
       <main className="minimal-main">
         <header className="header-block">
           <h2>New Query</h2>
-          <p>Compare 5 AI models, verify claims with evidence, and trust the final answer with confidence.</p>
+          <p>Compare 3 AI models, verify claims with evidence, and trust the final answer with confidence.</p>
         </header>
 
         <section className="query-card">
@@ -313,7 +314,7 @@ export const ChatLayout = () => {
         ) : null}
 
         <section className="panel">
-          <h3>AI Responses (5-model comparison)</h3>
+          <h3>AI Responses (3-model comparison)</h3>
           <div className="response-grid">
             {visibleResponseModels.map((modelName) => {
               const response = responses.find((item: ModelResponse) => item.model === modelName);

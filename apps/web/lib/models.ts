@@ -1,4 +1,4 @@
-export type ModelName = "GPT" | "Claude" | "Gemini" | "DeepSeek" | "Perplexity";
+export type ModelName = "GPT" | "Gemini" | "DeepSeek";
 
 export type ModelAnswerSource = "real_provider" | "fallback_generated";
 
@@ -82,10 +82,8 @@ export interface VerificationExecutionMeta {
   mode: "real_provider" | "fallback_only";
   modeUsed?: "fast" | "deep" | "research";
   gptSource: "openai" | "fallback";
-  claudeSource: "claude" | "fallback";
   geminiSource: "gemini" | "fallback";
   deepseekSource: "deepseek" | "fallback";
-  perplexitySource?: "perplexity" | "fallback";
   providerMessage: string;
   retrievalModeUsed: "mock" | "web";
   retrievalSourceCount: number;
