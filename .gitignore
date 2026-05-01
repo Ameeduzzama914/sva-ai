@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# Next.js build artifacts
+.next/
+out/
+
+# local env files
+.env.local
+apps/web/.env.local
+
+# misc
+*.log
+*.tsbuildinfo
