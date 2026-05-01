@@ -4,7 +4,7 @@ import { WebRetrievalProvider } from "./retrieval-web";
 
 export interface RetrievalResult {
   snippets: EvidenceSnippet[];
-  retrievalModeUsed: "mock" | "web";
+  retrievalModeUsed: "mock" | "web" | "none";
   fallbackToMock: boolean;
 }
 

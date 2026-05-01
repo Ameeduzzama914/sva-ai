@@ -79,13 +79,13 @@ export interface VerificationResult {
 }
 
 export interface VerificationExecutionMeta {
-  mode: "real_provider" | "fallback_only";
+  mode: "openrouter";
   modeUsed?: "fast" | "deep" | "research";
-  gptSource: "openai" | "fallback";
-  geminiSource: "gemini" | "fallback";
-  deepseekSource: "deepseek" | "fallback";
+  modelASource: "openrouter";
+  modelBSource: "openrouter";
+  modelCSource: "openrouter";
   providerMessage: string;
-  retrievalModeUsed: "mock" | "web";
+  retrievalModeUsed: "mock" | "web" | "none";
   retrievalSourceCount: number;
   retrievalFallbackToMock: boolean;
   responseQualityFlag?: "normal" | "low_response_count";

@@ -47,12 +47,10 @@ npm run dev
 ```
 
 ## Required environment variables
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-- `DEEPSEEK_API_KEY`
-- `RETRIEVAL_PROVIDER` (`mock` for demo, `web` for real retrieval)
-- `WEB_RETRIEVAL_ENDPOINT` (for web retrieval mode)
-- `WEB_RETRIEVAL_API_KEY` (for web retrieval mode)
+- `OPENROUTER_API_KEY`
+- ``
+- ``
+- `
 
 ## Vercel build settings
 - **Root Directory:** `.`

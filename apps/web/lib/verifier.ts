@@ -1,4 +1,4 @@
-import { deepseekProvider, geminiProvider, openAIProvider } from "./providers";
+import { callOpenRouter } from "./providers/openrouter";
 import {
   type ClaimVerification,
   type EvidenceSnippet,
@@ -12,7 +12,6 @@ import {
 } from "./models";
 import { extractClaims } from "./claims";
 import { retrievalProvider } from "./retrieval";
-import type { ProviderGenerateError } from "./providers/types";
 
 const STOPWORDS = new Set([
   "the",
@@ -135,13 +134,6 @@ const similarity = (a: string, b: string): number => {
   return Math.max(0, Math.min(1, combined));
 };
 
-const mapFallback = (error: ProviderGenerateError): "provider_unavailable" | "provider_error" => {
-  return error.reason === "not_configured" ? "provider_unavailable" : "provider_error";
-};
-
-const hardFallback = (model: ModelName, prompt: string): string =>
-  `[Fallback simulation for ${model}] Live provider unavailable. For prompt "${prompt}", the safest answer is uncertain without stronger evidence. Provide a concise, cautious response and clearly note uncertainty.`;
-
 const buildContextPrompt = (prompt: string, evidenceSnippets: EvidenceSnippet[]): string => {
   const context = evidenceSnippets
     .map((snippet, index) => `${index + 1}. ${snippet.title} (relevance ${snippet.relevanceScore}/100): ${snippet.text}`)
@@ -164,7 +156,7 @@ const getModelWeight = (modelSource: PerModelSource | undefined): number => {
     return 0.75;
   }
 
-  return modelSource.source === "real_provider" ? 1 : 0.75;
+  return 1;
 };
 
 const similarityToGroup = (answer: string, group: ModelResponse[]): number => {
@@ -780,7 +772,7 @@ export const verifyResponses = (
     outlierModels.length > 0
       ? `Outliers were detected from: ${listModels(outlierModels)}.`
       : "No outlier models were detected."
-  } Evidence alignment scored ${evidenceAlignmentScore}/100 with source quality ${sourceQualityScore}/100. Contradictions contributed a penalty of ${contradiction.contradictionPenalty}.${allProvidersFallback ? " All model outputs are fallback-generated, so confidence is capped for honesty." : ""} ${confidenceReason(
+  } Evidence alignment scored ${evidenceAlignmentScore}/100 with source quality ${sourceQualityScore}/100. Contradictions contributed a penalty of ${contradiction.contradictionPenalty}.${allProvidersFallback ? "" : ""} ${confidenceReason(
     confidence.label
   )}`;
   const claimVerifications = verifyClaims(finalAnswer, responses, evidenceSnippets, outlierModels);

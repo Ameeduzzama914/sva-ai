@@ -4,7 +4,6 @@ import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState 
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
-  type ModelName,
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
@@ -33,7 +32,7 @@ type UserSession = {
   onboardingCompleted: boolean;
 };
 
-const visibleResponseModels: ModelName[] = ["GPT", "Gemini", "DeepSeek"];
+const visibleResponseModels = ["Model A", "Model B", "Model C"] as const;
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
 
@@ -331,7 +330,7 @@ export const ChatLayout = () => {
                     </span>
                   </div>
                   <p>{response?.answer ?? "No response yet."}</p>
-                  <small className="muted-line">{source?.source === "fallback_generated" ? "Demo/Fallback response" : "Live provider response"}</small>
+                  <small className="muted-line">{"OpenRouter response"}</small>
                 </article>
               );
             })}
