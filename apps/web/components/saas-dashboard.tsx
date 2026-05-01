@@ -10,6 +10,7 @@ import {
   type EvidenceSnippet,
   type ModelResponse,
   type PerModelSource,
+  type RuntimeProviderStatus,
   type VerificationExecutionMeta,
   type VerificationMode,
   type VerificationResult,
@@ -40,9 +41,11 @@ export const SaasDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
+  const [runtimeProviderStatus, setRuntimeProviderStatus] = useState<Record<"GPT" | "Gemini" | "DeepSeek", RuntimeProviderStatus> | null>(null);
 
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
   const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
+  const liveSuccessCount = runtimeProviderStatus ? Object.values(runtimeProviderStatus).filter((item) => item.liveSuccess).length : null;
   const contradictionCount = !isDemoMode && verification?.contradictionScore ? Math.max(0, Math.ceil(verification.contradictionScore / 25)) : 0;
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
@@ -55,6 +58,7 @@ export const SaasDashboard = () => {
     setEvidenceSnippets([]);
     setVerification(null);
     setMeta(null);
+    setRuntimeProviderStatus(null);
 
     try {
       const response = await fetch("/api/verify", {
@@ -73,6 +77,7 @@ export const SaasDashboard = () => {
       setEvidenceSnippets(data.evidenceSnippets);
       setVerification(data.verification);
       setMeta(data.meta);
+      setRuntimeProviderStatus(data.providerRuntimeStatus);
       setWarnings(data.warnings ?? []);
     } catch {
       setErrorMessage("Verification request failed. Please try again.");
@@ -137,12 +142,14 @@ export const SaasDashboard = () => {
           {!isDemoMode && providerStatus ? (
             <Card className="border-emerald-500/30 bg-emerald-500/10 py-3" title="Live Provider Status">
               <p className="text-sm text-emerald-100">
-                Live verification enabled — {providerStatus.liveProviderCount} of 3 providers connected.
+                {liveSuccessCount === null
+                  ? `Configured for live verification — ${providerStatus.liveProviderCount} of 3 providers have API keys.`
+                  : `Live verification enabled — ${liveSuccessCount} of 3 providers returned live responses.`}
               </p>
               <ul className="mt-2 grid gap-1 text-xs text-emerald-100 sm:grid-cols-2">
-                <li>GPT: {providerStatus.openaiConfigured ? "Connected" : "Not configured"}</li>
-                <li>Gemini: {providerStatus.geminiConfigured ? "Connected" : "Not configured"}</li>
-                <li>DeepSeek: {providerStatus.deepseekConfigured ? "Connected" : "Not configured"}</li>
+                <li>GPT: {runtimeProviderStatus ? (runtimeProviderStatus.GPT.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.GPT.errorMessage ?? "request failed"}`) : providerStatus.openaiConfigured ? "Configured" : "Not configured"}</li>
+                <li>Gemini: {runtimeProviderStatus ? (runtimeProviderStatus.Gemini.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.Gemini.errorMessage ?? "request failed"}`) : providerStatus.geminiConfigured ? "Configured" : "Not configured"}</li>
+                <li>DeepSeek: {runtimeProviderStatus ? (runtimeProviderStatus.DeepSeek.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.DeepSeek.errorMessage ?? "request failed"}`) : providerStatus.deepseekConfigured ? "Configured" : "Not configured"}</li>
                 <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
               </ul>
               {providerStatus.liveProviderCount === 1 ? (

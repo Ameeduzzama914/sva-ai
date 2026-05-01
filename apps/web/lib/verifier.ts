@@ -7,7 +7,8 @@ import {
   type PerModelSource,
   type VerificationMode,
   type VerificationExecutionMeta,
-  type VerificationResult
+  type VerificationResult,
+  type RuntimeProviderStatus
 } from "./models";
 import { extractClaims } from "./claims";
 import { retrievalProvider } from "./retrieval";
@@ -544,15 +545,6 @@ const verifyClaims = (
   });
 };
 
-type LiveProviderEntry = {
-  model: ModelName;
-  provider:
-    | typeof openAIProvider
-    | typeof geminiProvider
-    | typeof deepseekProvider
-;
-};
-
 export const buildResponsesForPrompt = async (
   prompt: string,
   mode: VerificationMode = "fast"
@@ -561,6 +553,7 @@ export const buildResponsesForPrompt = async (
   modelSources: PerModelSource[];
   evidenceSnippets: EvidenceSnippet[];
   meta: VerificationExecutionMeta;
+  providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
 }> => {
   const retrievalResult = await retrievalProvider.retrieve(prompt, retrievalLimitByMode(mode));
   const normalizedEvidenceSnippets = retrievalResult.snippets.map((snippet) => ({
@@ -610,54 +603,16 @@ export const buildResponsesForPrompt = async (
     fallbackState: deepseekPrimary.ok ? "none" : mapFallback(deepseekPrimary)
   };
 
-  const liveProviders: LiveProviderEntry[] = [
-    gptPrimary.ok ? { model: "GPT", provider: openAIProvider } : null,
-    geminiPrimary.ok ? { model: "Gemini", provider: geminiProvider } : null,
-    deepseekPrimary.ok ? { model: "DeepSeek", provider: deepseekProvider } : null,
-  ].filter((entry): entry is LiveProviderEntry => Boolean(entry));
-
-  const generateViaAlternateLiveProvider = async (
-    targetModel: ModelName,
-    excludedModels: ModelName[]
-  ): Promise<string | null> => {
-    for (const entry of liveProviders) {
-      if (excludedModels.includes(entry.model)) {
-        continue;
-      }
-
-      const generated = await entry.provider.generate({ prompt: `Answer as ${targetModel} would. ${contextPrompt}` });
-      if (generated.ok) {
-        return generated.text;
-      }
-    }
-
-    return null;
-  };
-
   if (!gptPrimary.ok) {
-    gptAnswer = (await generateViaAlternateLiveProvider("GPT", ["GPT"])) ?? "";
-
-    if (!gptAnswer) {
-      gptAnswer = hardFallback("GPT", prompt);
-    }
+    gptAnswer = hardFallback("GPT", prompt);
   }
 
   if (!geminiPrimary.ok) {
-    geminiAnswer = (await generateViaAlternateLiveProvider("Gemini", ["Gemini"])) ?? "";
-    if (!geminiAnswer) {
-      geminiAnswer = hardFallback("Gemini", prompt);
-    }
+    geminiAnswer = hardFallback("Gemini", prompt);
   }
 
-  let deepseekGenerated: { ok: true; text: string } | null = null;
   if (!deepseekPrimary.ok) {
-    const syntheticDeepSeek = await generateViaAlternateLiveProvider("DeepSeek", ["DeepSeek"]);
-    if (syntheticDeepSeek) {
-      deepseekGenerated = { ok: true, text: syntheticDeepSeek };
-      deepseekAnswer = syntheticDeepSeek;
-    } else {
-      deepseekAnswer = hardFallback("DeepSeek", prompt);
-    }
+    deepseekAnswer = hardFallback("DeepSeek", prompt);
   }
 
   const modelSources: PerModelSource[] = [
@@ -677,17 +632,47 @@ export const buildResponsesForPrompt = async (
   const providerMessageParts = [
     gptPrimary.ok ? "GPT: live" : `GPT: fallback (${gptPrimary.message})`,
     geminiPrimary.ok ? "Gemini: live" : `Gemini: fallback (${geminiPrimary.message})`,
-    deepseekPrimary.ok
-      ? "DeepSeek: live"
-      : deepseekGenerated?.ok
-        ? "DeepSeek: synthetic from live provider"
-        : `DeepSeek: fallback (${deepseekPrimary.message})`,
+    deepseekPrimary.ok ? "DeepSeek: live" : `DeepSeek: fallback (${deepseekPrimary.message})`,
   ];
+
+  const providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus> = {
+    GPT: {
+      configured: Boolean(process.env.OPENAI_API_KEY),
+      liveSuccess: gptPrimary.ok,
+      source: gptSource.source,
+      fallbackState: gptSource.fallbackState,
+      errorMessage: gptPrimary.ok ? undefined : gptPrimary.message,
+      errorStatus: gptPrimary.ok ? undefined : gptPrimary.statusCode
+    },
+    Gemini: {
+      configured: Boolean(process.env.GEMINI_API_KEY),
+      liveSuccess: geminiPrimary.ok,
+      source: geminiSource.source,
+      fallbackState: geminiSource.fallbackState,
+      errorMessage: geminiPrimary.ok ? undefined : geminiPrimary.message,
+      errorStatus: geminiPrimary.ok ? undefined : geminiPrimary.statusCode
+    },
+    DeepSeek: {
+      configured: Boolean(process.env.DEEPSEEK_API_KEY),
+      liveSuccess: deepseekPrimary.ok,
+      source: deepseekSource.source,
+      fallbackState: deepseekSource.fallbackState,
+      errorMessage: deepseekPrimary.ok ? undefined : deepseekPrimary.message,
+      errorStatus: deepseekPrimary.ok ? undefined : deepseekPrimary.statusCode
+    }
+  };
+
+  console.info("SVA provider runtime status", {
+    gpt: { configured: providerRuntimeStatus.GPT.configured, liveSuccess: providerRuntimeStatus.GPT.liveSuccess, errorStatus: providerRuntimeStatus.GPT.errorStatus },
+    gemini: { configured: providerRuntimeStatus.Gemini.configured, liveSuccess: providerRuntimeStatus.Gemini.liveSuccess, errorStatus: providerRuntimeStatus.Gemini.errorStatus },
+    deepseek: { configured: providerRuntimeStatus.DeepSeek.configured, liveSuccess: providerRuntimeStatus.DeepSeek.liveSuccess, errorStatus: providerRuntimeStatus.DeepSeek.errorStatus }
+  });
 
   return {
     responses,
     modelSources,
     evidenceSnippets,
+    providerRuntimeStatus,
     meta: {
       mode: usedRealProvider ? "real_provider" : "fallback_only",
       modeUsed: mode,

@@ -106,10 +106,12 @@ export class OpenAIProvider implements TextProvider {
       }).finally(() => clearTimeout(timeout));
 
       if (!response.ok) {
+        const statusMessage = response.status === 429 ? "OpenAI quota/rate limit reached." : `OpenAI request failed with status ${response.status}.`;
         return {
           ok: false,
-          message: `OpenAI request failed with status ${response.status}.`,
-          reason: "request_failed"
+          message: statusMessage,
+          reason: "request_failed",
+          statusCode: response.status
         };
       }
 

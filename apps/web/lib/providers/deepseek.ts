@@ -67,10 +67,12 @@ export class DeepSeekProvider implements TextProvider {
       }).finally(() => clearTimeout(timeout));
 
       if (!response.ok) {
+        const statusMessage = response.status === 402 ? "DeepSeek billing/credit issue." : `DeepSeek request failed with status ${response.status}.`;
         return {
           ok: false,
-          message: `DeepSeek request failed with status ${response.status}.`,
-          reason: "request_failed"
+          message: statusMessage,
+          reason: "request_failed",
+          statusCode: response.status
         };
       }
 

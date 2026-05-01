@@ -11,6 +11,7 @@ export interface ProviderGenerateError {
   ok: false;
   message: string;
   reason: "not_configured" | "request_failed" | "parse_failed";
+  statusCode?: number;
 }
 
 export type ProviderResponse = ProviderGenerateResult | ProviderGenerateError;

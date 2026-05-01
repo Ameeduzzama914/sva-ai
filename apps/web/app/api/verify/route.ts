@@ -149,6 +149,7 @@ export async function POST(request: Request) {
         ...providerFlow.meta,
         responseQualityFlag
       },
+      providerRuntimeStatus: providerFlow.providerRuntimeStatus,
       usage,
       warnings
     };

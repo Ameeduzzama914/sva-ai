@@ -91,6 +91,15 @@ export interface VerificationExecutionMeta {
   responseQualityFlag?: "normal" | "low_response_count";
 }
 
+export interface RuntimeProviderStatus {
+  configured: boolean;
+  liveSuccess: boolean;
+  source: ModelAnswerSource;
+  fallbackState: ModelFallbackState;
+  errorMessage?: string;
+  errorStatus?: number;
+}
+
 export interface VerifyApiSuccess {
   ok: true;
   verification: VerificationResult;
@@ -98,6 +107,7 @@ export interface VerifyApiSuccess {
   modelSources: PerModelSource[];
   evidenceSnippets: EvidenceSnippet[];
   meta: VerificationExecutionMeta;
+  providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
   warnings?: string[];
   usage?: {
     plan: "free" | "pro";

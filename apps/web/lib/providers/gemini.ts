@@ -83,7 +83,8 @@ export class GeminiProvider implements TextProvider {
         return {
           ok: false,
           message: `Gemini request failed with status ${response.status}.`,
-          reason: "request_failed"
+          reason: "request_failed",
+          statusCode: response.status
         };
       }
 
