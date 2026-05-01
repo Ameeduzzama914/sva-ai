@@ -1,8 +1,8 @@
-export type ModelName = "Model A" | "Model B" | "Model C";
+export type ModelName = "GPT" | "Gemini" | "DeepSeek";
 
-export type ModelAnswerSource = "openrouter";
+export type ModelAnswerSource = "real_provider" | "fallback_generated";
 
-export type ModelFallbackState = "none";
+export type ModelFallbackState = "none" | "provider_unavailable" | "provider_error";
 
 export interface ModelResponse {
   model: ModelName;

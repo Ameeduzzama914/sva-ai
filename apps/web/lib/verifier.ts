@@ -548,23 +548,117 @@ export const buildResponsesForPrompt = async (
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
 }> => {
   const retrievalResult = await retrievalProvider.retrieve(prompt, retrievalLimitByMode(mode));
-  const evidenceSnippets = retrievalResult.snippets;
+  const normalizedEvidenceSnippets = retrievalResult.snippets.map((snippet) => ({
+    ...snippet,
+    sourceQualityScore: sourceQualityForSnippet(snippet)
+  }));
+  const evidenceSnippets =
+    normalizedEvidenceSnippets.length > 0
+      ? normalizedEvidenceSnippets
+      : [
+          {
+            title: "Fallback evidence note",
+            text: "No retrieval snippets were available, so confidence is automatically constrained until verifiable sources are found.",
+            sourceType: "mock_web" as const,
+            sourceId: "fallback-evidence",
+            relevanceScore: 35,
+            sourceQualityScore: 45
+          }
+        ];
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
 
-  const MODELS = [
-    { id: "mistralai/mistral-7b-instruct", name: "Model A" as const },
-    { id: "meta-llama/llama-3-8b-instruct", name: "Model B" as const },
-    { id: "google/gemma-7b-it", name: "Model C" as const }
+  const [gptPrimary, geminiPrimary, deepseekPrimary] = await Promise.all([
+    openAIProvider.generate({ prompt: contextPrompt }),
+    geminiProvider.generate({ prompt: contextPrompt }),
+    deepseekProvider.generate({ prompt: contextPrompt })
+  ]);
+
+  let gptAnswer = gptPrimary.ok ? gptPrimary.text : "";
+  let geminiAnswer = geminiPrimary.ok ? geminiPrimary.text : "";
+  let deepseekAnswer = deepseekPrimary.ok ? deepseekPrimary.text : "";
+
+  const gptSource: PerModelSource = {
+    model: "GPT",
+    source: gptPrimary.ok ? "real_provider" : "fallback_generated",
+    fallbackState: gptPrimary.ok ? "none" : mapFallback(gptPrimary)
+  };
+
+  const geminiSource: PerModelSource = {
+    model: "Gemini",
+    source: geminiPrimary.ok ? "real_provider" : "fallback_generated",
+    fallbackState: geminiPrimary.ok ? "none" : mapFallback(geminiPrimary)
+  };
+
+  const deepseekSource: PerModelSource = {
+    model: "DeepSeek",
+    source: deepseekPrimary.ok ? "real_provider" : "fallback_generated",
+    fallbackState: deepseekPrimary.ok ? "none" : mapFallback(deepseekPrimary)
+  };
+
+  if (!gptPrimary.ok) {
+    gptAnswer = hardFallback("GPT", prompt);
+  }
+
+  if (!geminiPrimary.ok) {
+    geminiAnswer = hardFallback("Gemini", prompt);
+  }
+
+  if (!deepseekPrimary.ok) {
+    deepseekAnswer = hardFallback("DeepSeek", prompt);
+  }
+
+  const modelSources: PerModelSource[] = [
+    gptSource,
+    geminiSource,
+    deepseekSource,
   ];
 
-  const outputs = await Promise.all(MODELS.map((m) => callOpenRouter(m.id, contextPrompt)));
-  const responses: ModelResponse[] = MODELS.map((m, i) => ({ model: m.name, answer: outputs[i] || "No response" }));
-  const modelSources: PerModelSource[] = MODELS.map((m) => ({ model: m.name, source: "openrouter", fallbackState: "none" }));
+  const responses: ModelResponse[] = [
+    { model: "GPT", answer: gptAnswer },
+    { model: "Gemini", answer: geminiAnswer },
+    { model: "DeepSeek", answer: deepseekAnswer },
+  ];
+
+  const usedRealProvider = gptPrimary.ok || geminiPrimary.ok || deepseekPrimary.ok;
+
+  const providerMessageParts = [
+    gptPrimary.ok ? "GPT: live" : `GPT: fallback (${gptPrimary.message})`,
+    geminiPrimary.ok ? "Gemini: live" : `Gemini: fallback (${geminiPrimary.message})`,
+    deepseekPrimary.ok ? "DeepSeek: live" : `DeepSeek: fallback (${deepseekPrimary.message})`,
+  ];
+
   const providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus> = {
-    "Model A": { configured: Boolean(process.env.OPENROUTER_API_KEY), liveSuccess: true, source: "openrouter", fallbackState: "none" },
-    "Model B": { configured: Boolean(process.env.OPENROUTER_API_KEY), liveSuccess: true, source: "openrouter", fallbackState: "none" },
-    "Model C": { configured: Boolean(process.env.OPENROUTER_API_KEY), liveSuccess: true, source: "openrouter", fallbackState: "none" }
+    GPT: {
+      configured: Boolean(process.env.OPENAI_API_KEY),
+      liveSuccess: gptPrimary.ok,
+      source: gptSource.source,
+      fallbackState: gptSource.fallbackState,
+      errorMessage: gptPrimary.ok ? undefined : gptPrimary.message,
+      errorStatus: gptPrimary.ok ? undefined : gptPrimary.statusCode
+    },
+    Gemini: {
+      configured: Boolean(process.env.GEMINI_API_KEY),
+      liveSuccess: geminiPrimary.ok,
+      source: geminiSource.source,
+      fallbackState: geminiSource.fallbackState,
+      errorMessage: geminiPrimary.ok ? undefined : geminiPrimary.message,
+      errorStatus: geminiPrimary.ok ? undefined : geminiPrimary.statusCode
+    },
+    DeepSeek: {
+      configured: Boolean(process.env.DEEPSEEK_API_KEY),
+      liveSuccess: deepseekPrimary.ok,
+      source: deepseekSource.source,
+      fallbackState: deepseekSource.fallbackState,
+      errorMessage: deepseekPrimary.ok ? undefined : deepseekPrimary.message,
+      errorStatus: deepseekPrimary.ok ? undefined : deepseekPrimary.statusCode
+    }
   };
+
+  console.info("SVA provider runtime status", {
+    gpt: { configured: providerRuntimeStatus.GPT.configured, liveSuccess: providerRuntimeStatus.GPT.liveSuccess, errorStatus: providerRuntimeStatus.GPT.errorStatus },
+    gemini: { configured: providerRuntimeStatus.Gemini.configured, liveSuccess: providerRuntimeStatus.Gemini.liveSuccess, errorStatus: providerRuntimeStatus.Gemini.errorStatus },
+    deepseek: { configured: providerRuntimeStatus.DeepSeek.configured, liveSuccess: providerRuntimeStatus.DeepSeek.liveSuccess, errorStatus: providerRuntimeStatus.DeepSeek.errorStatus }
+  });
 
   return {
     responses,
@@ -572,15 +666,15 @@ export const buildResponsesForPrompt = async (
     evidenceSnippets,
     providerRuntimeStatus,
     meta: {
-      mode: "openrouter",
+      mode: usedRealProvider ? "real_provider" : "fallback_only",
       modeUsed: mode,
-      modelASource: "openrouter",
-      modelBSource: "openrouter",
-      modelCSource: "openrouter",
-      providerMessage: "OpenRouter responses returned for all 3 models.",
+      gptSource: gptPrimary.ok ? "openai" : "fallback",
+      geminiSource: geminiPrimary.ok ? "gemini" : "fallback",
+      deepseekSource: deepseekPrimary.ok ? "deepseek" : "fallback",
+      providerMessage: providerMessageParts.join(" | "),
       retrievalModeUsed: retrievalResult.retrievalModeUsed,
       retrievalSourceCount: evidenceSnippets.length,
-      retrievalFallbackToMock: false
+      retrievalFallbackToMock: retrievalResult.fallbackToMock
     }
   };
 };
@@ -642,7 +736,7 @@ export const verifyResponses = (
   const evidenceAlignmentScore = computeEvidenceAlignment(largestGroup, outlierResponses, evidenceSnippets, sourceQualityScore);
   const contradiction = contradictionMetrics(responses);
   const consistency = responseConsistencyAdjustment(responses);
-  const allProvidersFallback = false;
+  const allProvidersFallback = modelSources.length > 0 && modelSources.every((source) => source.source === "fallback_generated");
   const noEvidence = evidenceSnippets.length === 0;
   const confidence = scoreConfidence(
     mode,

@@ -143,9 +143,9 @@ export const SaasDashboard = () => {
                   : `Live verification enabled — ${liveSuccessCount} of 3 providers returned live responses.`}
               </p>
               <ul className="mt-2 grid gap-1 text-xs text-emerald-100 sm:grid-cols-2">
-                <li>Model A: {runtimeProviderStatus ? (runtimeProviderStatus["Model A"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Model A"].errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Model B: {runtimeProviderStatus ? (runtimeProviderStatus["Model B"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Model B"].errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Model C: {runtimeProviderStatus ? (runtimeProviderStatus["Model C"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Model C"].errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
+                <li>GPT: {runtimeProviderStatus ? (runtimeProviderStatus.GPT.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.GPT.errorMessage ?? "request failed"}`) : providerStatus.openaiConfigured ? "Configured" : "Not configured"}</li>
+                <li>Gemini: {runtimeProviderStatus ? (runtimeProviderStatus.Gemini.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.Gemini.errorMessage ?? "request failed"}`) : providerStatus.geminiConfigured ? "Configured" : "Not configured"}</li>
+                <li>DeepSeek: {runtimeProviderStatus ? (runtimeProviderStatus.DeepSeek.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.DeepSeek.errorMessage ?? "request failed"}`) : providerStatus.deepseekConfigured ? "Configured" : "Not configured"}</li>
                 <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
               </ul>
               {providerStatus.liveProviderCount === 1 ? (

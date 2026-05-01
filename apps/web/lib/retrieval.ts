@@ -36,6 +36,10 @@ const selectRetrievalProvider = (): RetrievalProvider => {
   const mode = process.env.RETRIEVAL_PROVIDER?.toLowerCase();
   const mock = new MockRetrievalProvider();
 
+  if (mode === "web") {
+    return new FallbackRetrievalProvider(new WebRetrievalProvider(), mock);
+  }
+
   return mock;
 };
 
