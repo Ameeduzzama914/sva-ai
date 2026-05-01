@@ -178,7 +178,7 @@ export const SaasDashboard = () => {
           ) : null}
 
           <Card title="Multi-AI Responses" subtitle="Cross-model agreement overview with expandable answers">
-            <div className="grid gap-4 lg:grid-cols-3 sm:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-5 lg:grid-cols-3 sm:grid-cols-2">
               {visibleModels.map((model) => {
                 const response = responses.find((item) => item.model === model);
                 const source = sourceMap.get(model);

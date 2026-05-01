@@ -74,25 +74,10 @@ export class MockRetrievalProvider implements RetrievalProvider {
         relevanceScore: Math.round(Math.min(1, entry.score / 8) * 100)
       }));
 
-    const withSignal = ranked.filter((snippet) => snippet.relevanceScore >= 20);
-    if (withSignal.length === 0) {
-      return {
-        snippets: [
-          {
-            title: "No strong evidence found",
-            text: "No relevant evidence snippets matched this prompt in mock retrieval. Treat the result as low-confidence until stronger sources are available.",
-            sourceType: "mock_web",
-            sourceId: "generic-insufficient-evidence",
-            relevanceScore: 20
-          }
-        ],
-        retrievalModeUsed: "mock",
-        fallbackToMock: false
-      };
-    }
+    const withSignal = ranked.filter((snippet) => snippet.relevanceScore > 0);
 
     return {
-      snippets: withSignal,
+      snippets: withSignal.length > 0 ? withSignal : ranked,
       retrievalModeUsed: "mock",
       fallbackToMock: false
     };

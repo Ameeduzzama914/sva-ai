@@ -4,6 +4,7 @@ import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState 
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
+  type ModelName,
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
@@ -32,7 +33,7 @@ type UserSession = {
   onboardingCompleted: boolean;
 };
 
-const visibleResponseModels = ["GPT", "Gemini", "DeepSeek"] as const;
+const visibleResponseModels: ModelName[] = ["GPT", "Gemini", "DeepSeek"];
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
 
