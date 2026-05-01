@@ -4,7 +4,7 @@ SVA is a launch-ready Trust Engine SaaS that helps users verify AI answers befor
 
 ## Features included
 - Email/password authentication (MVP)
-- Multi-model verification (GPT, Claude, Gemini, DeepSeek)
+- Multi-model verification (GPT, Gemini, DeepSeek)
 - Evidence retrieval (web + mock fallback)
 - Confidence + trust breakdown + contradiction analysis
 - SVA Judge verdict + risk flags
@@ -48,10 +48,8 @@ npm run dev
 
 ## Required environment variables
 - `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
 - `GEMINI_API_KEY`
 - `DEEPSEEK_API_KEY`
-- `PERPLEXITY_API_KEY`
 - `RETRIEVAL_PROVIDER` (`mock` for demo, `web` for real retrieval)
 - `WEB_RETRIEVAL_ENDPOINT` (for web retrieval mode)
 - `WEB_RETRIEVAL_API_KEY` (for web retrieval mode)
