@@ -41,12 +41,12 @@ export const SaasDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
-  const [runtimeProviderStatus, setRuntimeProviderStatus] = useState<Record<"GPT" | "Gemini" | "DeepSeek", RuntimeProviderStatus> | null>(null);
+  const [runtimeProviderStatus, setRuntimeProviderStatus] = useState<Record<ModelName, RuntimeProviderStatus> | null>(null);
 
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
-  const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
+  const isLiveMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
   const liveSuccessCount = runtimeProviderStatus ? Object.values(runtimeProviderStatus).filter((item) => item.liveSuccess).length : null;
-  const contradictionCount = !isDemoMode && verification?.contradictionScore ? Math.max(0, Math.ceil(verification.contradictionScore / 25)) : 0;
+  const contradictionCount = !isLiveMode && verification?.contradictionScore ? Math.max(0, Math.ceil(verification.contradictionScore / 25)) : 0;
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,14 +122,15 @@ export const SaasDashboard = () => {
             elapsedLabel={meta ? `Verification completed in mode: ${meta.modeUsed ?? mode}` : undefined}
           />
 
-          {isDemoMode ? (
-            <Card className="border-amber-500/40 bg-amber-500/10 py-3" title="Demo Mode">
+          {isLiveMode ? (
+            <Card className="border-amber-500/40 bg-amber-500/10 py-3" title="OpenRouter Mode">
               <p className="text-sm text-amber-100">
-                Live AI providers are not connected yet. Add API keys in Vercel to enable real verification.
+                OpenRouter API key is not configured yet. Add OPENROUTER_API_KEY in Vercel.
               </p>
               <details className="mt-2 text-xs text-amber-100">
                 <summary className="cursor-pointer text-amber-200">Setup helper</summary>
                 <ul className="mt-1 grid gap-1 sm:grid-cols-2">
+                  <li>OPENROUTER_API_KEY</li>
                   <li>OPENAI_API_KEY</li>
                                     <li>GEMINI_API_KEY</li>
                   <li>DEEPSEEK_API_KEY</li>
@@ -139,7 +140,7 @@ export const SaasDashboard = () => {
               </details>
             </Card>
           ) : null}
-          {!isDemoMode && providerStatus ? (
+          {!isLiveMode && providerStatus ? (
             <Card className="border-emerald-500/30 bg-emerald-500/10 py-3" title="Live Provider Status">
               <p className="text-sm text-emerald-100">
                 {liveSuccessCount === null
@@ -178,14 +179,14 @@ export const SaasDashboard = () => {
           ) : null}
 
           <Card title="Multi-AI Responses" subtitle="Cross-model agreement overview with expandable answers">
-            <div className="grid gap-4 xl:grid-cols-5 lg:grid-cols-3 sm:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-3 sm:grid-cols-2">
               {visibleModels.map((model) => {
                 const response = responses.find((item) => item.model === model);
                 const source = sourceMap.get(model);
                 const isMajority = verification?.majorityModels.includes(model) ?? false;
                 const isOutlier = verification?.outlierModels.includes(model) ?? false;
-                const badgeText = isDemoMode ? "Demo" : isMajority ? "Majority" : isOutlier ? "Outlier" : "Waiting";
-                const badgeClass = isDemoMode
+                const badgeText = isLiveMode ? "Live" : isMajority ? "Majority" : isOutlier ? "Outlier" : "Waiting";
+                const badgeClass = isLiveMode
                   ? "bg-slate-500/20 text-slate-300"
                   : isOutlier
                     ? "bg-amber-500/20 text-amber-300"
@@ -195,7 +196,7 @@ export const SaasDashboard = () => {
                   <article
                     key={model}
                     className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-[0_0_28px_rgba(139,92,246,0.18)] ${
-                      !isDemoMode && isMajority ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-700 bg-slate-950/60"
+                      !isLiveMode && isMajority ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-700 bg-slate-950/60"
                     }`}
                   >
                     <div className="mb-2 flex items-center justify-between">
@@ -238,14 +239,14 @@ export const SaasDashboard = () => {
                 <div className="flex items-center gap-4">
                   <div
                     className="grid h-24 w-24 place-items-center rounded-full p-1"
-                    style={{ background: `conic-gradient(#8b5cf6 ${isDemoMode ? 0 : trustScore * 3.6}deg, #1f2937 0deg)` }}
+                    style={{ background: `conic-gradient(#8b5cf6 ${isLiveMode ? 0 : trustScore * 3.6}deg, #1f2937 0deg)` }}
                   >
-                    <div className="grid h-full w-full place-items-center rounded-full bg-slate-950 text-sm font-semibold text-violet-200">{isDemoMode ? "--" : trustScore}</div>
+                    <div className="grid h-full w-full place-items-center rounded-full bg-slate-950 text-sm font-semibold text-violet-200">{isLiveMode ? "--" : trustScore}</div>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-100">{isDemoMode ? "Demo Preview" : trustLabel}</p>
+                    <p className="text-sm font-semibold text-slate-100">{isLiveMode ? "Live Preview" : trustLabel}</p>
                     <p className="text-xs text-slate-400">
-                      {isDemoMode
+                      {isLiveMode
                         ? "Connect live provider API keys to generate a real trust score."
                         : "Confidence is derived from agreement, evidence, source quality, and contradiction impact."}
                     </p>
@@ -262,10 +263,10 @@ export const SaasDashboard = () => {
                     <div key={item.label}>
                       <div className="mb-1 flex justify-between text-xs text-slate-300">
                         <span>{item.label}</span>
-                        <span>{isDemoMode ? "--" : `${item.value}%`}</span>
+                        <span>{isLiveMode ? "--" : `${item.value}%`}</span>
                       </div>
                       <div className="h-2 rounded-full bg-slate-800">
-                        <div className="h-2 rounded-full bg-violet-400" style={{ width: `${isDemoMode ? 0 : item.value}%` }} />
+                        <div className="h-2 rounded-full bg-violet-400" style={{ width: `${isLiveMode ? 0 : item.value}%` }} />
                       </div>
                     </div>
                   ))}
@@ -280,25 +281,25 @@ export const SaasDashboard = () => {
             className="border-violet-400/40 shadow-[0_0_35px_rgba(139,92,246,0.18)]"
           >
             <p className="text-lg leading-7 text-slate-100">
-              {isDemoMode
+              {isLiveMode
                 ? "Live verification unavailable. Connect provider API keys to generate a final SVA verified answer."
                 : verification?.finalAnswer ?? "No verified answer yet."}
             </p>
             <div className="mt-3 flex items-center gap-3 text-sm">
-              <span className="font-semibold text-violet-300">Confidence: {isDemoMode ? "--" : verification?.finalConfidenceScore ?? 0}%</span>
-              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">{isDemoMode ? "Demo Preview" : verification?.confidenceLabel ?? "Pending"}</span>
+              <span className="font-semibold text-violet-300">Confidence: {isLiveMode ? "--" : verification?.finalConfidenceScore ?? 0}%</span>
+              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">{isLiveMode ? "Live Preview" : verification?.confidenceLabel ?? "Pending"}</span>
             </div>
             <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-300">
-              <li>{isDemoMode ? "Key takeaways will appear after live provider responses are available." : verification?.reasoning ?? "Key takeaways appear after verification completes."}</li>
+              <li>{isLiveMode ? "Key takeaways will appear after live provider responses are available." : verification?.reasoning ?? "Key takeaways appear after verification completes."}</li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="primary" type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
+              <Button variant="primary" type="button" disabled={isLiveMode} title={isLiveMode ? "Available after live verification." : undefined}>
                 Copy Answer
               </Button>
-              <Button type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
+              <Button type="button" disabled={isLiveMode} title={isLiveMode ? "Available after live verification." : undefined}>
                 Export
               </Button>
-              <Button variant="ghost" type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
+              <Button variant="ghost" type="button" disabled={isLiveMode} title={isLiveMode ? "Available after live verification." : undefined}>
                 Share
               </Button>
             </div>
@@ -318,7 +319,7 @@ export const SaasDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {isDemoMode ? (
+                    {isLiveMode ? (
                       <tr>
                         <td className="px-2 py-3 text-slate-400" colSpan={5}>
                           Claim-level verification will appear here after live provider responses are connected.
@@ -342,7 +343,7 @@ export const SaasDashboard = () => {
               </div>
             </Card>
             <Card title="Evidence Panel">
-              {isDemoMode ? (
+              {isLiveMode ? (
                 <p className="text-xs text-slate-400">
                   Evidence sources will appear here after live providers or web retrieval are connected.
                 </p>
@@ -368,9 +369,9 @@ export const SaasDashboard = () => {
               )}
             </Card>
             <Card title="Contradictions">
-              <p className="text-sm text-slate-300">{isDemoMode ? "No live contradiction analysis yet. Connect providers to compare real model outputs." : `Contradiction score: ${verification?.contradictionScore ?? 0}%`}</p>
+              <p className="text-sm text-slate-300">{isLiveMode ? "No live contradiction analysis yet. Connect providers to compare real model outputs." : `Contradiction score: ${verification?.contradictionScore ?? 0}%`}</p>
               <p className="mt-2 text-xs text-slate-400">
-                {isDemoMode ? "Demo mode: contradiction scoring is disabled for fallback-only runs." : meta?.providerMessage ?? "Provider state appears here after verification."}
+                {isLiveMode ? "Live mode: contradiction scoring is disabled for fallback-only runs." : meta?.providerMessage ?? "Provider state appears here after verification."}
               </p>
             </Card>
           </div>
