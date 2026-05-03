@@ -8,7 +8,6 @@ import { Card } from "./ui/card";
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
-  type ModelName,
   type ModelResponse,
   type PerModelSource,
   type RuntimeProviderStatus,
@@ -132,6 +131,11 @@ export const SaasDashboard = () => {
                 <summary className="cursor-pointer text-amber-200">Setup helper</summary>
                 <ul className="mt-1 grid gap-1 sm:grid-cols-2">
                   <li>OPENROUTER_API_KEY</li>
+                  <li>OPENAI_API_KEY</li>
+                                    <li>GEMINI_API_KEY</li>
+                  <li>DEEPSEEK_API_KEY</li>
+                                    <li>RETRIEVAL_PROVIDER=mock or web</li>
+                  <li>WEB_RETRIEVAL_API_KEY (for web mode)</li>
                 </ul>
               </details>
             </Card>
@@ -144,9 +148,9 @@ export const SaasDashboard = () => {
                   : `Live verification enabled — ${liveSuccessCount} of 3 providers returned live responses.`}
               </p>
               <ul className="mt-2 grid gap-1 text-xs text-emerald-100 sm:grid-cols-2">
-                <li>GPT: {runtimeProviderStatus ? (runtimeProviderStatus.GPT.liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus.GPT.errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Gemini: {runtimeProviderStatus ? (runtimeProviderStatus.Gemini.liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus.Gemini.errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>DeepSeek: {runtimeProviderStatus ? (runtimeProviderStatus.DeepSeek.liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus.DeepSeek.errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
+                <li>GPT: {runtimeProviderStatus ? (runtimeProviderStatus.GPT.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.GPT.errorMessage ?? "request failed"}`) : providerStatus.openaiConfigured ? "Configured" : "Not configured"}</li>
+                <li>Gemini: {runtimeProviderStatus ? (runtimeProviderStatus.Gemini.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.Gemini.errorMessage ?? "request failed"}`) : providerStatus.geminiConfigured ? "Configured" : "Not configured"}</li>
+                <li>DeepSeek: {runtimeProviderStatus ? (runtimeProviderStatus.DeepSeek.liveSuccess ? "Live response" : `Fallback: ${runtimeProviderStatus.DeepSeek.errorMessage ?? "request failed"}`) : providerStatus.deepseekConfigured ? "Configured" : "Not configured"}</li>
                 <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
               </ul>
               {providerStatus.liveProviderCount === 1 ? (
@@ -202,11 +206,11 @@ export const SaasDashboard = () => {
                     <p className="text-xs leading-5 text-slate-300">
                       {isLoading
                         ? "Verifying response..."
-                        : isLiveMode
-                          ? "Live response placeholder. Connect this provider API key to enable live model output."
+                        : isDemoMode
+                          ? "Demo response placeholder. Connect this provider API key to enable live model output."
                           : response?.answer ?? "Waiting"}
                     </p>
-                    <p className="mt-3 text-[11px] text-slate-400">Source: {isLiveMode ? "OpenRouter" : "OpenRouter"}</p>
+                    <p className="mt-3 text-[11px] text-slate-400">Source: {isDemoMode ? "Fallback/Demo" : source?.source === "real_provider" ? "Live Provider" : "Fallback/Demo"}</p>
                   </article>
                 );
               })}
@@ -215,13 +219,13 @@ export const SaasDashboard = () => {
 
           <div className="grid gap-5 xl:grid-cols-[1.45fr_0.95fr]">
             <Card title="SVA Judge" subtitle="Trust verdict and contradiction summary">
-              <p className="text-sm text-slate-300">Verdict: {isLiveMode ? "DEMO PREVIEW" : (verification?.judgeVerdict ?? "caution").toUpperCase()}</p>
+              <p className="text-sm text-slate-300">Verdict: {isDemoMode ? "DEMO PREVIEW" : (verification?.judgeVerdict ?? "caution").toUpperCase()}</p>
               <p className="mt-2 text-sm text-slate-400">
-                {isLiveMode
+                {isDemoMode
                   ? "SVA Judge requires live model responses and evidence sources before issuing a verdict."
                   : verification?.judgeSummary ?? "Run verification to generate a judge summary."}
               </p>
-              {!isLiveMode && verification?.judgeRiskFlags?.length ? (
+              {!isDemoMode && verification?.judgeRiskFlags?.length ? (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-amber-300">
                   {verification.judgeRiskFlags.map((flag, idx) => (
                     <li key={`${flag}-${idx}`}>{flag}</li>
@@ -230,7 +234,7 @@ export const SaasDashboard = () => {
               ) : null}
             </Card>
 
-            <Card title="SVA Trust Score" subtitle={isLiveMode ? "--/100" : `${trustScore}/100`}>
+            <Card title="SVA Trust Score" subtitle={isDemoMode ? "--/100" : `${trustScore}/100`}>
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div

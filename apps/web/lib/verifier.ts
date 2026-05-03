@@ -12,6 +12,7 @@ import {
 } from "./models";
 import { extractClaims } from "./claims";
 import { retrievalProvider } from "./retrieval";
+import type { ProviderGenerateError } from "./providers/types";
 
 const STOPWORDS = new Set([
   "the",
@@ -156,7 +157,7 @@ const getModelWeight = (modelSource: PerModelSource | undefined): number => {
     return 0.75;
   }
 
-  return 1;
+  return modelSource.source === "real_provider" ? 1 : 0.75;
 };
 
 const similarityToGroup = (answer: string, group: ModelResponse[]): number => {
@@ -698,7 +699,7 @@ export const verifyResponses = (
   const evidenceAlignmentScore = computeEvidenceAlignment(largestGroup, outlierResponses, evidenceSnippets, sourceQualityScore);
   const contradiction = contradictionMetrics(responses);
   const consistency = responseConsistencyAdjustment(responses);
-  const allProvidersFallback = false;
+  const allProvidersFallback = modelSources.length > 0 && modelSources.every((source) => source.source === "fallback_generated");
   const noEvidence = evidenceSnippets.length === 0;
   const confidence = scoreConfidence(
     mode,
@@ -734,7 +735,7 @@ export const verifyResponses = (
     outlierModels.length > 0
       ? `Outliers were detected from: ${listModels(outlierModels)}.`
       : "No outlier models were detected."
-  } Evidence alignment scored ${evidenceAlignmentScore}/100 with source quality ${sourceQualityScore}/100. Contradictions contributed a penalty of ${contradiction.contradictionPenalty}.${allProvidersFallback ? "" : ""} ${confidenceReason(
+  } Evidence alignment scored ${evidenceAlignmentScore}/100 with source quality ${sourceQualityScore}/100. Contradictions contributed a penalty of ${contradiction.contradictionPenalty}.${allProvidersFallback ? " All model outputs are fallback-generated, so confidence is capped for honesty." : ""} ${confidenceReason(
     confidence.label
   )}`;
   const claimVerifications = verifyClaims(finalAnswer, responses, evidenceSnippets, outlierModels);
