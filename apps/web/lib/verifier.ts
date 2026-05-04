@@ -647,6 +647,55 @@ export const verifyResponses = (
   evidenceSnippets: EvidenceSnippet[],
   mode: VerificationMode = "fast"
 ): VerificationResult => {
+  const validResponses = responses.filter((response) => {
+    const source = modelSources.find((item) => item.model === response.model);
+    return source?.source === "openrouter";
+  });
+
+  if (validResponses.length === 0) {
+    return {
+      agreementScore: 0,
+      evidenceAlignmentScore: 0,
+      finalConfidenceScore: 0,
+      confidenceLabel: "Low",
+      finalAnswer: "Final answer generated with limited model agreement. Confidence is low.",
+      majorityModels: [],
+      outlierModels: [],
+      reasoning: "No live model responses were returned.",
+      explanation: "Live verification unavailable. All model calls failed.",
+      claimVerifications: [],
+      contradictionScore: 0,
+      contradictionPenalty: 0,
+      sourceQualityScore: 0,
+      judgeVerdict: "rejected",
+      judgeSummary: "NO DATA",
+      judgeRiskFlags: ["No models responded successfully."]
+    };
+  }
+
+  if (validResponses.length === 1) {
+    const only = validResponses[0];
+    return {
+      agreementScore: 25,
+      evidenceAlignmentScore: 20,
+      finalConfidenceScore: 25,
+      confidenceLabel: "Low",
+      finalAnswer: `${only.answer}\n\nFinal answer generated with limited model agreement. Confidence is low.`,
+      majorityModels: [],
+      outlierModels: [],
+      reasoning: "Only one model responded successfully.",
+      explanation: "Partial verification: only 1/3 models responded.",
+      claimVerifications: [],
+      contradictionScore: 0,
+      contradictionPenalty: 0,
+      sourceQualityScore: computeSourceQualityScore(evidenceSnippets),
+      judgeVerdict: "caution",
+      judgeSummary: "LOW CONFIDENCE",
+      judgeRiskFlags: ["Only one model response available."]
+    };
+  }
+
+  responses = validResponses;
   const groups: ModelResponse[][] = [];
   const groupScores: Array<{ model: ModelName; bestGroupScore: number; assignedGroupIndex: number }> = [];
 

@@ -315,23 +315,27 @@ export const ChatLayout = () => {
 
         <section className="panel">
           <h3>AI Responses (3-model comparison)</h3>
+          {modelSources.filter((source) => source.source === "openrouter").length < 3 && responses.length > 0 ? (
+            <p className="muted-line">⚠️ Partial Verification: Only {modelSources.filter((source) => source.source === "openrouter").length}/3 models responded. Results may be unreliable.</p>
+          ) : null}
           <div className="response-grid">
             {visibleResponseModels.map((modelName) => {
               const response = responses.find((item: ModelResponse) => item.model === modelName);
               const source = modelSourceMap.get(modelName);
-              const isMajority = verification?.majorityModels.includes(modelName) ?? false;
-              const isOutlier = verification?.outlierModels.includes(modelName) ?? false;
+              const isSuccess = source?.source === "openrouter";
+              const isMajority = isSuccess && (verification?.majorityModels.includes(modelName) ?? false);
+              const isOutlier = isSuccess && (verification?.outlierModels.includes(modelName) ?? false);
 
               return (
                 <article className="response-card" key={modelName}>
                   <div className="row-space">
                     <strong>{modelName}</strong>
-                    <span className={isMajority ? "badge majority" : isOutlier ? "badge outlier" : "badge pending"}>
-                      {isMajority ? "Majority" : isOutlier ? "Outlier" : "Pending"}
+                    <span className={isSuccess ? (isMajority ? "badge majority" : isOutlier ? "badge outlier" : "badge pending") : "badge outlier"}>
+                      {isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Pending") : "❌ Failed"}
                     </span>
                   </div>
-                  <p>{response?.answer ?? "No response yet."}</p>
-                  <small className="muted-line">{"OpenRouter response"}</small>
+                  <p>{isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
+                  <small className="muted-line">{isSuccess ? "Source: OpenRouter" : "Source: Unavailable"}</small>
                 </article>
               );
             })}
