@@ -4,13 +4,13 @@ import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState 
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
-  type ModelName,
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
   type VerificationMode,
   type VerificationResult,
-  type VerifyApiResponse
+  type VerifyApiResponse,
+  type ModelName
 } from "../lib/models";
 
 type HistoryItem = {
@@ -331,7 +331,7 @@ export const ChatLayout = () => {
                     </span>
                   </div>
                   <p>{response?.answer ?? "No response yet."}</p>
-                  <small className="muted-line">{source?.source === "fallback_generated" ? "Demo/Fallback response" : "Live provider response"}</small>
+                  <small className="muted-line">{"OpenRouter response"}</small>
                 </article>
               );
             })}

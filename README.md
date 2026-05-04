@@ -1,61 +1,19 @@
-# SVA (Super Verified AI) — Commercial Launch Version (v1)
+# SVA (Super Verified AI)
 
-SVA is a launch-ready Trust Engine SaaS that helps users verify AI answers before acting on them.
+SVA compares three model slots (**GPT**, **Gemini**, **DeepSeek**) powered through **OpenRouter**.
 
-## Features included
-- Email/password authentication (MVP)
-- Multi-model verification (GPT, Gemini, DeepSeek)
-- Evidence retrieval (web + mock fallback)
-- Confidence + trust breakdown + contradiction analysis
-- SVA Judge verdict + risk flags
-- Verification modes: Fast, Deep Verify, Research
-- User-based history (last 20 verifications)
-- Usage limits enforced in backend by plan
-- Pricing and simulated upgrade flow
-- Basic analytics event logging
-- Feedback submission event tracking
-- Privacy Policy and Terms pages
+## Required
+- `OPENROUTER_API_KEY`
 
-## Pricing model
-- **Free**: 10 verifications/day
-- **Pro**: ₹499/month (Early Access Price — will increase to ₹999 soon; simulated checkout in this MVP)
+## Optional model routing
+- `OPENROUTER_MODEL_A` (default `mistralai/mistral-7b-instruct:free`)
+- `OPENROUTER_MODEL_B` (default `meta-llama/llama-3.1-8b-instruct:free`)
+- `OPENROUTER_MODEL_C` (default `google/gemma-7b-it:free`)
 
-## Commercial notes
-This is intentionally a lean v1 for first paying users and rapid validation.
+## Retrieval
+- `RETRIEVAL_PROVIDER=mock` (or `web`, `none`)
+- `WEB_RETRIEVAL_ENDPOINT=https://google.serper.dev/search`
+- `WEB_RETRIEVAL_API_KEY=`
 
-## Limitations (current MVP)
-- Basic auth only (cookie + JSON datastore)
-- Mock payments (no real Stripe/Razorpay charge)
-- No production database (JSON file storage)
-- No enterprise-grade security hardening yet
-- Analytics stored locally (not external analytics platform yet)
-
-## Next steps
-- Deploy to Vercel
-- Integrate real Stripe/Razorpay checkout + webhooks
-- Move datastore to Supabase/Firebase/Postgres
-- Add production analytics (PostHog)
-- Add robust session management and security controls
-
-## Quick start
-```bash
-cd apps/web
-cp .env.example .env.local
-npm install
-npm run build
-npm run dev
-```
-
-## Required environment variables
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-- `DEEPSEEK_API_KEY`
-- `RETRIEVAL_PROVIDER` (`mock` for demo, `web` for real retrieval)
-- `WEB_RETRIEVAL_ENDPOINT` (for web retrieval mode)
-- `WEB_RETRIEVAL_API_KEY` (for web retrieval mode)
-
-## Vercel build settings
-- **Root Directory:** `.`
-- **Framework Preset:** `Next.js`
-- **Build Command:** `cd apps/web && npm install && npm run build`
-- **Environment recommendation:** set `RETRIEVAL_PROVIDER=mock` for demo deployments, or `web` when Serper is configured.
+## Public URL
+- `NEXT_PUBLIC_SITE_URL=http://localhost:3000`

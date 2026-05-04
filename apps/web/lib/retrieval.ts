@@ -4,7 +4,7 @@ import { WebRetrievalProvider } from "./retrieval-web";
 
 export interface RetrievalResult {
   snippets: EvidenceSnippet[];
-  retrievalModeUsed: "mock" | "web";
+  retrievalModeUsed: "mock" | "web" | "none";
   fallbackToMock: boolean;
 }
 
@@ -35,9 +35,18 @@ class FallbackRetrievalProvider implements RetrievalProvider {
 const selectRetrievalProvider = (): RetrievalProvider => {
   const mode = process.env.RETRIEVAL_PROVIDER?.toLowerCase();
   const mock = new MockRetrievalProvider();
+  const web = new WebRetrievalProvider();
 
   if (mode === "web") {
-    return new FallbackRetrievalProvider(new WebRetrievalProvider(), mock);
+    return new FallbackRetrievalProvider(web, mock);
+  }
+
+  if (mode === "none") {
+    return {
+      async retrieve() {
+        return { snippets: [], retrievalModeUsed: "none", fallbackToMock: false };
+      }
+    };
   }
 
   return mock;
