@@ -575,7 +575,7 @@ export const buildResponsesForPrompt = async (
 
     return {
       model: m.name,
-      answer: ""
+      answer: `No live response from ${m.name}. ${result && "message" in result ? result.message : "OpenRouter request failed."}`
     };
   });
 
