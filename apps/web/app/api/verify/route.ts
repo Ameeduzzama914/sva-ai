@@ -75,11 +75,11 @@ export async function POST(request: Request) {
     const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
     const responseQualityFlag = validResponses.length < 3 ? "low_response_count" : "normal";
 
-    if (validResponses.length === 0) {
+    if (validResponses.length < 2) {
       return NextResponse.json(
         {
           ok: false,
-          message: "No valid AI responses were returned."
+          message: "Not enough valid AI responses"
         } as VerifyApiError,
         { status: 500 }
       );
@@ -89,12 +89,9 @@ export async function POST(request: Request) {
     const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode);
     let warnings: string[] = [];
 
-    if (validResponses.length === 1) {
-      warnings.push("Only one AI model responded. Confidence may be unreliable.");
-    }
-
     if (validResponses.length < 3) {
       warnings.push("Partial model response — results may be less reliable.");
+      warnings.push("One model failed — verification based on remaining models");
     }
 
 
