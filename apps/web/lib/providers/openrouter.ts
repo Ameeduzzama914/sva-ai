@@ -1,9 +1,9 @@
 import type { ModelName } from "../models";
 
 export const OPENROUTER_MODELS = [
-  { slot: "GPT", envKey: "OPENROUTER_MODEL_A", defaultModel: "mistralai/mistral-7b-instruct:free" },
-  { slot: "Gemini", envKey: "OPENROUTER_MODEL_B", defaultModel: "meta-llama/llama-3.1-8b-instruct:free" },
-  { slot: "DeepSeek", envKey: "OPENROUTER_MODEL_C", defaultModel: "google/gemma-7b-it:free" }
+  { slot: "Fast AI", envKey: "OPENROUTER_MODEL_A", defaultModel: "mistralai/mistral-7b-instruct:free" },
+  { slot: "Balanced AI", envKey: "OPENROUTER_MODEL_B", defaultModel: "meta-llama/llama-3.1-8b-instruct:free" },
+  { slot: "Research AI", envKey: "OPENROUTER_MODEL_C", defaultModel: "google/gemma-7b-it:free" }
 ] as const satisfies ReadonlyArray<{ slot: ModelName; envKey: string; defaultModel: string }>;
 
 export type OpenRouterResult =

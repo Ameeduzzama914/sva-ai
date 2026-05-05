@@ -1,6 +1,6 @@
-export type ModelName = "GPT" | "Gemini" | "DeepSeek";
+export type ModelName = "Fast AI" | "Balanced AI" | "Research AI";
 
-export type ModelAnswerSource = "openrouter" | "real_provider" | "fallback_generated";
+export type ModelAnswerSource = "openrouter" | "fallback_generated";
 
 export type ModelFallbackState = "none" | "provider_unavailable" | "provider_error";
 
@@ -17,3 +17,5 @@ export interface VerifyApiError { ok:false; message:string; }
 export type VerificationMode = "fast"|"deep"|"research";
 export type VerifyApiResponse = VerifyApiSuccess | VerifyApiError;
 export const STARTER_PROMPT = "What is the tallest mountain in the world above sea level?";
+
+export type FuturePlanModelName = "GPT" | "Gemini" | "DeepSeek" | "Claude" | "Perplexity";

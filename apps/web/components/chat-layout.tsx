@@ -33,7 +33,7 @@ type UserSession = {
   onboardingCompleted: boolean;
 };
 
-const visibleResponseModels: ModelName[] = ["GPT", "Gemini", "DeepSeek"];
+const visibleResponseModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
 
@@ -335,7 +335,7 @@ export const ChatLayout = () => {
                     </span>
                   </div>
                   <p>{isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
-                  <small className="muted-line">{isSuccess ? "Source: OpenRouter" : "Source: Unavailable"}</small>
+                  <small className="muted-line">{isSuccess ? "Source: AI gateway" : "Source: Model unavailable"}</small>
                 </article>
               );
             })}

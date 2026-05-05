@@ -575,7 +575,7 @@ export const buildResponsesForPrompt = async (
 
     return {
       model: m.name,
-      answer: `No live response from ${m.name}. ${result && "message" in result ? result.message : "OpenRouter request failed."}`
+      answer: ""
     };
   });
 
@@ -593,7 +593,7 @@ export const buildResponsesForPrompt = async (
   });
 
   const providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus> = {
-    GPT: {
+    "Fast AI": {
       configured: Boolean(process.env.OPENROUTER_API_KEY),
       liveSuccess: outputs[0]?.ok === true,
       source: "openrouter",
@@ -602,7 +602,7 @@ export const buildResponsesForPrompt = async (
       statusCode: getOpenRouterErrorStatus(outputs[0]),
       providerModelId: outputs[0]?.providerModelId
     },
-    Gemini: {
+    "Balanced AI": {
       configured: Boolean(process.env.OPENROUTER_API_KEY),
       liveSuccess: outputs[1]?.ok === true,
       source: "openrouter",
@@ -611,7 +611,7 @@ export const buildResponsesForPrompt = async (
       statusCode: getOpenRouterErrorStatus(outputs[1]),
       providerModelId: outputs[1]?.providerModelId
     },
-    DeepSeek: {
+    "Research AI": {
       configured: Boolean(process.env.OPENROUTER_API_KEY),
       liveSuccess: outputs[2]?.ok === true,
       source: "openrouter",
@@ -630,10 +630,10 @@ export const buildResponsesForPrompt = async (
     meta: {
       mode: "openrouter",
       modeUsed: mode,
-      gptSource: "openrouter",
-      geminiSource: "openrouter",
-      deepseekSource: "openrouter",
-      providerMessage: "OpenRouter responses returned for all 3 models.",
+      modelASource: "openrouter",
+      modelBSource: "openrouter",
+      modelCSource: "openrouter",
+      providerMessage: "Live AI responses returned for all 3 models.",
       retrievalModeUsed: retrievalResult.retrievalModeUsed,
       retrievalSourceCount: evidenceSnippets.length,
       retrievalFallbackToMock: false
