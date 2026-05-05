@@ -34,6 +34,11 @@ type UserSession = {
 };
 
 const visibleResponseModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
+const modelBadgeLabel: Record<ModelName, string> = {
+  "Fast AI": "Mistral 7B",
+  "Balanced AI": "Llama 3.1 8B",
+  "Research AI": "Gemma 7B"
+};
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
 
@@ -329,13 +334,18 @@ export const ChatLayout = () => {
               return (
                 <article className="response-card" key={modelName}>
                   <div className="row-space">
-                    <strong>{modelName}</strong>
+                    <div className="flex items-center gap-2">
+                      <strong>{modelName}</strong>
+                      <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-200">
+                        {modelBadgeLabel[modelName]}
+                      </span>
+                    </div>
                     <span className={isSuccess ? (isMajority ? "badge majority" : isOutlier ? "badge outlier" : "badge pending") : "badge outlier"}>
                       {isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Pending") : "❌ Failed"}
                     </span>
                   </div>
                   <p>{isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
-                  <small className="muted-line">{isSuccess ? "Source: AI gateway" : "Source: Model unavailable"}</small>
+                  <small className="muted-line">Source: SVA Model Layer</small>
                 </article>
               );
             })}

@@ -20,6 +20,11 @@ import {
 import type { ProviderStatus } from "../lib/server/provider-status";
 
 const visibleModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
+const modelBadgeLabel: Record<ModelName, string> = {
+  "Fast AI": "Mistral 7B",
+  "Balanced AI": "Llama 3.1 8B",
+  "Research AI": "Gemma 7B"
+};
 
 const statusStyle: Record<string, string> = {
   supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
@@ -201,7 +206,12 @@ export const SaasDashboard = () => {
                     }`}
                   >
                     <div className="mb-2 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-100">{model}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{model}</p>
+                        <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-200">
+                          {modelBadgeLabel[model]}
+                        </span>
+                      </div>
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>{badgeText}</span>
                     </div>
                     <p className="text-xs leading-5 text-slate-300">
@@ -213,7 +223,7 @@ export const SaasDashboard = () => {
                             ? response?.answer ?? "Waiting"
                             : "Model unavailable"}
                     </p>
-                    <p className="mt-3 text-[11px] text-slate-400">Source: {isSuccess ? "AI gateway" : "Unavailable"}</p>
+                    <p className="mt-3 text-[11px] text-slate-400">Source: SVA Model Layer</p>
                   </article>
                 );
               })}
