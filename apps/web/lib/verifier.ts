@@ -570,7 +570,7 @@ export const buildResponsesForPrompt = async (
   const responses: ModelResponse[] = MODELS.map((m, i) => {
     const result = outputs[i];
     if (result && result.ok === true) {
-      return { model: m.name, answer: result.text };
+      return { model: m.name, answer: result.text?.trim() || "No response generated." };
     }
 
     return {
@@ -647,10 +647,7 @@ export const verifyResponses = (
   evidenceSnippets: EvidenceSnippet[],
   mode: VerificationMode = "fast"
 ): VerificationResult => {
-  const validResponses = responses.filter((response) => {
-    const source = modelSources.find((item) => item.model === response.model);
-    return source?.source === "openrouter";
-  });
+  const validResponses = responses.filter((response) => response.answer && response.answer.trim().length > 0);
 
   if (validResponses.length === 0) {
     return {
