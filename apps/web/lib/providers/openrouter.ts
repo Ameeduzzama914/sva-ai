@@ -37,8 +37,18 @@ export async function callOpenRouter(modelId: string, prompt: string): Promise<O
       response = await requestOnce();
     }
 
+    console.log("OPENROUTER DEBUG → RESPONSE STATUS:", {
+      modelId,
+      status: response.status
+    });
+
     if (!response.ok) {
       const payload = (await response.text().catch(() => "")).slice(0, 500);
+      console.error("OPENROUTER ERROR:", {
+        modelId,
+        status: response.status,
+        payload: payload
+      });
       console.error("AI model request failed", { modelId, statusCode: response.status, errorMessage: payload || response.statusText });
       const userMessage =
         response.status === 404
@@ -50,6 +60,10 @@ export async function callOpenRouter(modelId: string, prompt: string): Promise<O
     }
 
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
+    console.log("OPENROUTER DEBUG → RAW DATA:", {
+      modelId,
+      data
+    });
     const text = data.choices?.[0]?.message?.content?.trim();
 
     if (!text) {
@@ -57,9 +71,17 @@ export async function callOpenRouter(modelId: string, prompt: string): Promise<O
       return { ok: false, message: "AI model request failed.", reason: "provider_error", providerModelId: modelId };
     }
 
+    console.log("OPENROUTER DEBUG → SUCCESS:", {
+      modelId,
+      text: text?.slice(0, 200)
+    });
+
     return { ok: true, text, providerModelId: modelId };
   } catch (error) {
-    console.error("AI model request exception", { modelId, errorMessage: error instanceof Error ? error.message : "Unknown error" });
+    console.error("OPENROUTER EXCEPTION:", {
+      modelId,
+      error: error instanceof Error ? error.message : error
+    });
     return { ok: false, message: "AI model request failed.", reason: "provider_error", providerModelId: modelId };
   }
 }

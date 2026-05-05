@@ -75,11 +75,11 @@ export async function POST(request: Request) {
     const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
     const responseQualityFlag = validResponses.length < 3 ? "low_response_count" : "normal";
 
-    if (validResponses.length < 2) {
+    if (validResponses.length === 0) {
       return NextResponse.json(
         {
           ok: false,
-          message: "Not enough valid AI responses were returned. Please try again."
+          message: "No valid AI responses were returned."
         } as VerifyApiError,
         { status: 500 }
       );
@@ -87,11 +87,17 @@ export async function POST(request: Request) {
 
     const adjustedMode = validResponses.length < 3 && mode === "fast" ? "deep" : mode;
     const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode);
-    const warnings: string[] = [];
+    let warnings: string[] = [];
+
+    if (validResponses.length === 1) {
+      warnings.push("Only one AI model responded. Confidence may be unreliable.");
+    }
 
     if (validResponses.length < 3) {
-      warnings.push("Low number of valid AI responses. Confidence may be reduced.");
+      warnings.push("Partial model response — results may be less reliable.");
     }
+
+
 
     if (safeEvidenceSnippets.length === 1 && safeEvidenceSnippets[0].sourceId === "fallback-evidence-notice") {
       warnings.push("No real external evidence was found.");
