@@ -556,7 +556,21 @@ export const buildResponsesForPrompt = async (
     name: slot.slot
   }));
 
-  const outputs = await Promise.all(MODELS.map((m) => callOpenRouter(m.id, contextPrompt)));
+  const outputs = await Promise.all(
+    MODELS.map(async (m) => {
+      const result = await callOpenRouter(m.id, contextPrompt);
+      if (result.ok) {
+        return result;
+      }
+
+      const fallback = await callOpenRouter("mistralai/mistral-7b-instruct:free", contextPrompt);
+      if (fallback.ok) {
+        return fallback;
+      }
+
+      return result;
+    })
+  );
   const getOpenRouterErrorMessage = (result: Awaited<ReturnType<typeof callOpenRouter>> | undefined): string | undefined => {
     if (!result || result.ok === true) return undefined;
     return result.message;
@@ -575,7 +589,7 @@ export const buildResponsesForPrompt = async (
 
     return {
       model: m.name,
-      answer: ""
+      answer: "Temporary AI issue. Retrying recommended."
     };
   });
 
