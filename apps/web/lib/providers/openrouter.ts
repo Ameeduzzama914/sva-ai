@@ -1,10 +1,22 @@
 import type { ModelName } from "../models";
 
 export const OPENROUTER_MODELS = [
-  { slot: "Fast AI", envKey: "OPENROUTER_MODEL_A", defaultModel: "mistralai/mistral-7b-instruct:free" },
-  { slot: "Balanced AI", envKey: "OPENROUTER_MODEL_B", defaultModel: "meta-llama/llama-3.1-8b-instruct:free" },
-  { slot: "Research AI", envKey: "OPENROUTER_MODEL_C", defaultModel: "google/gemma-7b-it:free" }
-] as const satisfies ReadonlyArray<{ slot: ModelName; envKey: string; defaultModel: string }>;
+  {
+    slot: "Fast AI",
+    envKey: "OPENROUTER_MODEL_A",
+    fallbackChain: ["mistralai/mistral-7b-instruct:free", "openrouter/free"]
+  },
+  {
+    slot: "Balanced AI",
+    envKey: "OPENROUTER_MODEL_B",
+    fallbackChain: ["meta-llama/llama-3.1-8b-instruct:free", "openrouter/free"]
+  },
+  {
+    slot: "Research AI",
+    envKey: "OPENROUTER_MODEL_C",
+    fallbackChain: ["google/gemma-3-27b-it:free", "deepseek/deepseek-r1:free", "openrouter/free"]
+  }
+] as const satisfies ReadonlyArray<{ slot: ModelName; envKey: string; fallbackChain: readonly string[] }>;
 
 export type OpenRouterResult =
   | { ok: true; text: string; providerModelId: string }

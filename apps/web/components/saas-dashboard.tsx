@@ -102,6 +102,7 @@ export const SaasDashboard = () => {
     void loadStatus();
   }, []);
 
+  const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
   const trustScore = verification?.finalConfidenceScore ?? 0;
   const trustLabel =
     verification?.confidenceLabel === "High"
@@ -191,9 +192,11 @@ export const SaasDashboard = () => {
                 const isSuccess = source?.source === "openrouter";
                 const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
                 const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
-                const badgeText = isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Live") : "Failed";
-                const badgeClass = !isSuccess
-                  ? "bg-rose-500/20 text-rose-300"
+                const badgeText = !hasRunVerification ? "Ready" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable";
+                const badgeClass = !hasRunVerification
+                  ? "bg-slate-500/20 text-slate-200"
+                  : !isSuccess
+                    ? "bg-rose-500/20 text-rose-300"
                   : isOutlier
                     ? "bg-amber-500/20 text-amber-300"
                     : "bg-emerald-500/20 text-emerald-300";
@@ -217,11 +220,13 @@ export const SaasDashboard = () => {
                     <p className="text-xs leading-5 text-slate-300">
                       {isLoading
                         ? "Verifying response..."
-                        : isDemoMode
-                          ? "Model unavailable. Check backend model configuration."
-                          : isSuccess
-                            ? response?.answer ?? "Waiting"
-                            : "Model unavailable"}
+                        : !hasRunVerification
+                          ? "Ready to verify"
+                          : isDemoMode
+                            ? "Model unavailable. Check backend model configuration."
+                            : isSuccess
+                              ? response?.answer ?? "Waiting"
+                              : "Model unavailable"}
                     </p>
                     <p className="mt-3 text-[11px] text-slate-400">Source: SVA Model Layer</p>
                   </article>

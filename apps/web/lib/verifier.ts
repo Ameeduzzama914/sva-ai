@@ -551,24 +551,29 @@ export const buildResponsesForPrompt = async (
   const evidenceSnippets = retrievalResult.snippets;
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
 
-  const MODELS: { id: string; name: ModelName }[] = OPENROUTER_MODELS.map((slot) => ({
-    id: process.env[slot.envKey] || slot.defaultModel,
-    name: slot.slot
-  }));
+  const MODELS = OPENROUTER_MODELS.map((slot) => {
+    const primaryModel = process.env[slot.envKey]?.trim();
+    const modelSequence = [primaryModel, ...slot.fallbackChain].filter((item): item is string => Boolean(item && item.length > 0));
+    return {
+      name: slot.slot,
+      primaryModel: primaryModel ?? slot.fallbackChain[0],
+      modelSequence
+    };
+  });
 
   const outputs = await Promise.all(
-    MODELS.map(async (m) => {
-      const result = await callOpenRouter(m.id, contextPrompt);
-      if (result.ok) {
-        return result;
+    MODELS.map(async (slot) => {
+      let lastFailure: Awaited<ReturnType<typeof callOpenRouter>> | undefined;
+
+      for (const modelId of slot.modelSequence) {
+        const result = await callOpenRouter(modelId, contextPrompt);
+        if (result.ok) {
+          return result;
+        }
+        lastFailure = result;
       }
 
-      const fallback = await callOpenRouter("mistralai/mistral-7b-instruct:free", contextPrompt);
-      if (fallback.ok) {
-        return fallback;
-      }
-
-      return result;
+      return lastFailure;
     })
   );
   const getOpenRouterErrorMessage = (result: Awaited<ReturnType<typeof callOpenRouter>> | undefined): string | undefined => {
@@ -589,7 +594,7 @@ export const buildResponsesForPrompt = async (
 
     return {
       model: m.name,
-      answer: "Temporary AI issue. Retrying recommended."
+      answer: ""
     };
   });
 
@@ -600,7 +605,7 @@ export const buildResponsesForPrompt = async (
       model: m.name,
       source: result && result.ok === true ? "openrouter" : "fallback_generated",
       fallbackState,
-      providerModelId: result?.providerModelId ?? m.id,
+      providerModelId: result?.providerModelId ?? MODELS[i].primaryModel,
       errorMessage: getOpenRouterErrorMessage(result),
       statusCode: getOpenRouterErrorStatus(result)
     };
@@ -659,7 +664,8 @@ export const verifyResponses = (
   responses: ModelResponse[],
   modelSources: PerModelSource[],
   evidenceSnippets: EvidenceSnippet[],
-  mode: VerificationMode = "fast"
+  mode: VerificationMode = "fast",
+  failedModelCount = 0
 ): VerificationResult => {
   const validResponses = responses.filter((response) => response.answer && response.answer.trim().length > 0);
 
@@ -775,6 +781,8 @@ export const verifyResponses = (
       weakSourceQuality: sourceQualityScore < 40
     }
   );
+  const availabilityPenalty = failedModelCount === 1 ? 5 : 0;
+  const adjustedFinalConfidence = Math.max(0, confidence.score - availabilityPenalty);
   const finalAnswer = buildFinalAnswerWithDisagreement(
     pickRepresentativeAnswer(largestGroup),
     majorityModels,
@@ -810,8 +818,8 @@ export const verifyResponses = (
   return {
     agreementScore,
     evidenceAlignmentScore,
-    finalConfidenceScore: confidence.score,
-    confidenceLabel: confidence.label,
+    finalConfidenceScore: adjustedFinalConfidence,
+    confidenceLabel: adjustedFinalConfidence >= 75 ? "High" : adjustedFinalConfidence >= 45 ? "Medium" : "Low",
     finalAnswer,
     majorityModels,
     outlierModels,

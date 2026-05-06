@@ -86,12 +86,16 @@ export async function POST(request: Request) {
     }
 
     const adjustedMode = validResponses.length < 3 && mode === "fast" ? "deep" : mode;
-    const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode);
+    const failedModelCount = providerFlow.responses.length - validResponses.length;
+    const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode, failedModelCount);
     let warnings: string[] = [];
 
-    if (validResponses.length < 3) {
-      warnings.push("Partial model response — results may be less reliable.");
-      warnings.push("One model failed — verification based on remaining models");
+    if (failedModelCount === 1) {
+      warnings.push("One model was temporarily unavailable. Verification is based on remaining models.");
+    }
+
+    if (failedModelCount >= 2) {
+      warnings.push("Some AI models were temporarily unavailable. Please retry.");
     }
 
 

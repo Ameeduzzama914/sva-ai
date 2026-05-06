@@ -163,6 +163,8 @@ export const ChatLayout = () => {
 
   const modelSourceMap = useMemo(() => new Map(modelSources.map((source: PerModelSource) => [source.model, source])), [modelSources]);
 
+  const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
+
   const agreementRows = useMemo(() => {
     if (!verification) {
       return [];
@@ -341,10 +343,10 @@ export const ChatLayout = () => {
                       </span>
                     </div>
                     <span className={isSuccess ? (isMajority ? "badge majority" : isOutlier ? "badge outlier" : "badge pending") : "badge outlier"}>
-                      {isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Pending") : "❌ Failed"}
+                      {!hasRunVerification ? "Ready" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable"}
                     </span>
                   </div>
-                  <p>{isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
+                  <p>{!hasRunVerification ? "Ready to verify" : isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
                   <small className="muted-line">Source: SVA Model Layer</small>
                 </article>
               );
