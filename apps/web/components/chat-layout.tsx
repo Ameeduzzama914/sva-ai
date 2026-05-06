@@ -60,6 +60,7 @@ export const ChatLayout = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [activeNav, setActiveNav] = useState<NavItem>("New Query");
+  const [hasSubmittedVerification, setHasSubmittedVerification] = useState(false);
 
   const loadSession = useCallback(async () => {
     const response = await fetch("/api/auth/me");
@@ -125,6 +126,7 @@ export const ChatLayout = () => {
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setHasSubmittedVerification(true);
     setIsLoading(true);
     setErrorMessage(null);
     setResponses([]);
@@ -163,7 +165,7 @@ export const ChatLayout = () => {
 
   const modelSourceMap = useMemo(() => new Map(modelSources.map((source: PerModelSource) => [source.model, source])), [modelSources]);
 
-  const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
+  const hasRunVerification = hasSubmittedVerification || responses.length > 0 || verification !== null || errorMessage !== null;
 
   const agreementRows = useMemo(() => {
     if (!verification) {
@@ -260,7 +262,16 @@ export const ChatLayout = () => {
           <form onSubmit={handleVerify}>
             <textarea
               value={prompt}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+                setPrompt(event.target.value);
+                setResponses([]);
+                setModelSources([]);
+                setEvidenceSnippets([]);
+                setVerification(null);
+                setMeta(null);
+                setErrorMessage(null);
+                setHasSubmittedVerification(false);
+              }}
               placeholder="Ask anything. SVA will verify it."
               required
             />
@@ -343,10 +354,10 @@ export const ChatLayout = () => {
                       </span>
                     </div>
                     <span className={isSuccess ? (isMajority ? "badge majority" : isOutlier ? "badge outlier" : "badge pending") : "badge outlier"}>
-                      {!hasRunVerification ? "Ready" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable"}
+                      {!hasRunVerification ? "Pending" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable"}
                     </span>
                   </div>
-                  <p>{!hasRunVerification ? "Ready to verify" : isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
+                  <p>{!hasRunVerification ? "Awaiting verification" : isSuccess ? response?.answer ?? "No response yet." : "Model unavailable"}</p>
                   <small className="muted-line">Source: SVA Model Layer</small>
                 </article>
               );

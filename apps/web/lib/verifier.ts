@@ -370,7 +370,7 @@ const scoreConfidence = (
     finalScore = Math.min(finalScore, 70);
   }
   if (guardrails.noEvidence) {
-    finalScore = Math.min(finalScore, 55);
+    finalScore = Math.min(finalScore, 65);
   }
 
   if (finalScore >= 78) {
