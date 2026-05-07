@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { type VerificationMode, type VerifyApiError, type VerifyApiSuccess } from "../../../lib/models";
+import { type VerificationMode, type VerificationUsageSummary, type VerifyApiError, type VerifyApiSuccess } from "../../../lib/models";
 import { getAuthenticatedUser } from "../../../lib/server/auth";
-import { appendHistoryForUser, consumeDailyVerificationQuota, getDailyLimit, trackEvent } from "../../../lib/server/store";
+import { appendHistoryForUser, consumeVerificationCredits, getDailyLimit, trackEvent } from "../../../lib/server/store";
 import { buildResponsesForPrompt, verifyResponses } from "../../../lib/verifier";
 
 interface VerifyRequestBody {
@@ -104,26 +104,31 @@ export async function POST(request: Request) {
       warnings.push("No real external evidence was found.");
     }
 
-    let usage = {
-      plan: (user?.plan ?? "free") as "free" | "pro",
+    let usage: VerificationUsageSummary = {
+      plan: (user?.plan ?? "free") as "free" | "pro" | "plus",
       usedToday: user?.usedToday ?? 0,
-      dailyLimit: user?.dailyLimit ?? getDailyLimit("free")
+      dailyLimit: user?.dailyLimit ?? getDailyLimit("free"),
+      creditsRemaining: user?.creditsRemaining ?? 0
     };
 
+    let creditsUsed = 0;
+    let creditsRemaining = user?.creditsRemaining ?? 0;
     if (user) {
-      const quota = await consumeDailyVerificationQuota(user.userId);
-      if (!quota) {
+      const creditResult = await consumeVerificationCredits(user.userId, mode);
+      if (!creditResult) {
         return NextResponse.json({ ok: false, message: "User session not found." } as VerifyApiError, { status: 401 });
       }
-      if (!quota.ok) {
+      if (!creditResult.ok) {
         return NextResponse.json(
           {
             ok: false,
-            message: `Daily limit reached for ${quota.plan} plan (${quota.dailyLimit}/day). Upgrade to Pro for higher limits.`
+            message: "Verification limit exceeded. Upgrade your plan or wait for reset."
           } as VerifyApiError,
-          { status: 429 }
+          { status: 403 }
         );
       }
+      creditsUsed = creditResult.creditsUsed;
+      creditsRemaining = creditResult.creditsRemaining;
 
       await appendHistoryForUser(user.userId, {
         prompt,
@@ -131,7 +136,9 @@ export async function POST(request: Request) {
         resultSummary: verification.finalAnswer,
         timestamp: new Date().toISOString(),
         confidence: verification.finalConfidenceScore,
-        verdict: verification.judgeVerdict ?? "caution"
+        verdict: verification.judgeVerdict ?? "caution",
+        creditsUsed,
+        success: true
       });
       await trackEvent("verification_completed", user.userId, {
         mode,
@@ -140,9 +147,10 @@ export async function POST(request: Request) {
       });
 
       usage = {
-        plan: quota.plan,
-        usedToday: quota.usedToday,
-        dailyLimit: quota.dailyLimit
+        plan: user.plan,
+        usedToday: user.usedToday,
+        dailyLimit: getDailyLimit(user.plan),
+        creditsRemaining
       };
     }
 

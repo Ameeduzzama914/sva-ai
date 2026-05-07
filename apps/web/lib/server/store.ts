@@ -2,7 +2,7 @@ import { randomUUID, scryptSync, timingSafeEqual } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
-export type UserPlan = "free" | "pro";
+export type UserPlan = "free" | "pro" | "plus";
 
 export type UserHistoryItem = {
   prompt: string;
@@ -11,6 +11,8 @@ export type UserHistoryItem = {
   timestamp: string;
   confidence: number;
   verdict: string;
+  creditsUsed?: number;
+  success?: boolean;
 };
 
 type UsageByDate = Record<string, number>;
@@ -25,6 +27,10 @@ type StoredUser = {
   createdAt: string;
   history: UserHistoryItem[];
   onboardingCompleted?: boolean;
+  creditsRemaining?: number;
+  creditsResetAt?: string;
+  monthlyUsage?: number;
+  dailyUsage?: number;
 };
 
 type AnalyticsEventName =
@@ -133,6 +139,11 @@ export const createUser = async (email: string, password: string): Promise<Store
       createdAt: new Date().toISOString(),
       history: [],
       onboardingCompleted: false
+      ,
+      creditsRemaining: 15,
+      creditsResetAt: nextResetAt("free"),
+      monthlyUsage: 0,
+      dailyUsage: 0
     };
 
     store.users.push(user);
@@ -168,10 +179,26 @@ export const upgradeUserToPro = async (userId: string): Promise<StoredUser | nul
       return null;
     }
     user.plan = "pro";
+    user.creditsRemaining = PLAN_CREDIT_LIMIT.pro;
+    user.creditsResetAt = nextResetAt("pro");
     await saveStore(store);
     return user;
   });
 };
+
+export const upgradeUserPlan = async (userId: string, plan: UserPlan): Promise<StoredUser | null> =>
+  withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) return null;
+    user.plan = plan;
+    user.creditsRemaining = PLAN_CREDIT_LIMIT[plan];
+    user.creditsResetAt = nextResetAt(plan);
+    user.dailyUsage = 0;
+    user.monthlyUsage = 0;
+    await saveStore(store);
+    return user;
+  });
 
 export const appendHistoryForUser = async (userId: string, item: UserHistoryItem): Promise<StoredUser | null> => {
   return withWriteLock(async () => {
@@ -245,7 +272,7 @@ export const consumeDailyVerificationQuota = async (
 };
 
 export const getDailyLimit = (plan: UserPlan): number => {
-  return plan === "pro" ? 100 : 10;
+  return plan === "free" ? 15 : 0;
 };
 
 export const trackEvent = async (
@@ -283,7 +310,32 @@ export type PublicUser = {
   usedToday: number;
   dailyLimit: number;
   onboardingCompleted: boolean;
+  creditsRemaining: number;
+  creditsResetAt: string;
+  monthlyUsage: number;
+  dailyUsage: number;
 };
+
+export const consumeVerificationCredits = async (
+  userId: string,
+  mode: "fast" | "deep" | "research"
+): Promise<{ ok: true; creditsRemaining: number; creditsUsed: number; plan: UserPlan; creditsResetAt: string } | { ok: false; creditsRemaining: number; creditsUsed: number; plan: UserPlan; creditsResetAt: string } | null> =>
+  withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) return null;
+    resetCreditsIfNeededInternal(user);
+    const cost = getVerificationCreditCost(mode);
+    const remaining = user.creditsRemaining ?? PLAN_CREDIT_LIMIT[user.plan];
+    if (remaining < cost) {
+      return { ok: false, creditsRemaining: remaining, creditsUsed: cost, plan: user.plan, creditsResetAt: user.creditsResetAt ?? nextResetAt(user.plan) };
+    }
+    user.creditsRemaining = remaining - cost;
+    user.dailyUsage = (user.dailyUsage ?? 0) + cost;
+    user.monthlyUsage = (user.monthlyUsage ?? 0) + cost;
+    await saveStore(store);
+    return { ok: true, creditsRemaining: user.creditsRemaining, creditsUsed: cost, plan: user.plan, creditsResetAt: user.creditsResetAt ?? nextResetAt(user.plan) };
+  });
 
 export const toPublicUser = (user: StoredUser): PublicUser => ({
   userId: user.userId,
@@ -293,7 +345,11 @@ export const toPublicUser = (user: StoredUser): PublicUser => ({
   createdAt: user.createdAt,
   usedToday: getUsageForToday(user),
   dailyLimit: getDailyLimit(user.plan),
-  onboardingCompleted: Boolean(user.onboardingCompleted)
+  onboardingCompleted: Boolean(user.onboardingCompleted),
+  creditsRemaining: user.creditsRemaining ?? PLAN_CREDIT_LIMIT[user.plan],
+  creditsResetAt: user.creditsResetAt ?? nextResetAt(user.plan),
+  monthlyUsage: user.monthlyUsage ?? 0,
+  dailyUsage: user.dailyUsage ?? 0
 });
 
 export const getUserHistory = async (userId: string): Promise<UserHistoryItem[]> => {
@@ -309,6 +365,40 @@ export const clearUserHistory = async (userId: string): Promise<void> => {
       return;
     }
     user.history = [];
+    await saveStore(store);
+  });
+};
+const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: 15, pro: 150, plus: 500 };
+export const getMonthlyCreditLimit = (plan: UserPlan): number => (plan === "free" ? 0 : PLAN_CREDIT_LIMIT[plan]);
+export const getPlanCreditLimit = (plan: UserPlan): number => PLAN_CREDIT_LIMIT[plan];
+export const getVerificationCreditCost = (mode: "fast" | "deep" | "research"): number => (mode === "research" ? 5 : mode === "deep" ? 3 : 1);
+
+const nextResetAt = (plan: UserPlan): string => {
+  const now = new Date();
+  if (plan === "free") {
+    const next = new Date(now);
+    next.setUTCHours(24, 0, 0, 0);
+    return next.toISOString();
+  }
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
+  return next.toISOString();
+};
+
+const resetCreditsIfNeededInternal = (user: StoredUser): void => {
+  const resetAt = user.creditsResetAt ? new Date(user.creditsResetAt).getTime() : 0;
+  if (!resetAt || Date.now() >= resetAt) {
+    user.creditsRemaining = PLAN_CREDIT_LIMIT[user.plan];
+    user.creditsResetAt = nextResetAt(user.plan);
+    user.dailyUsage = 0;
+    if (user.plan !== "free") user.monthlyUsage = 0;
+  }
+};
+export const resetCreditsIfNeeded = async (userId: string): Promise<void> => {
+  await withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) return;
+    resetCreditsIfNeededInternal(user);
     await saveStore(store);
   });
 };

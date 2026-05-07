@@ -25,12 +25,14 @@ type HistoryItem = {
 type UserSession = {
   userId: string;
   email: string;
-  plan: "free" | "pro";
+  plan: "free" | "pro" | "plus";
   usageCount: number;
   createdAt: string;
   usedToday: number;
   dailyLimit: number;
   onboardingCompleted: boolean;
+  creditsRemaining?: number;
+  creditsResetAt?: string;
 };
 
 const visibleResponseModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
@@ -240,6 +242,9 @@ export const ChatLayout = () => {
               <p className="muted-line">
                 Usage: {user.usedToday}/{user.dailyLimit}
               </p>
+              <p className="muted-line">
+                Credits: {user.creditsRemaining ?? 0} remaining
+              </p>
               <button className="menu-ghost" type="button" onClick={handleLogout}>
                 Logout
               </button>
@@ -283,8 +288,8 @@ export const ChatLayout = () => {
                   </span>
                 ))}
               </div>
-              <button className="run-button" type="submit" disabled={isLoading}>
-                {isLoading ? "Verifying..." : "Run Verification"}
+              <button className="run-button" type="submit" disabled={isLoading || (user ? (user.creditsRemaining ?? 0) <= 0 : false)}>
+                {isLoading ? "Verifying..." : user && (user.creditsRemaining ?? 0) <= 0 ? "Verification Limit Reached" : "Run Verification"}
               </button>
             </div>
             <div className="chip-row">
