@@ -335,7 +335,10 @@ const computeEvidenceMetrics = (
   outlierResponses: ModelResponse[]
 ): { evidenceStrength: number; sourceQuality: number; credibility: number; evidenceCoverage: number } => {
   const sourceQuality = computeSourceQualityScore(evidenceSnippets);
-  const evidenceStrength = computeEvidenceAlignment(majorityResponses, outlierResponses, evidenceSnippets, sourceQuality);
+  let evidenceStrength = computeEvidenceAlignment(majorityResponses, outlierResponses, evidenceSnippets, sourceQuality);
+  if (majorityResponses.length >= 2 && outlierResponses.length === 0 && evidenceSnippets.length > 0) {
+    evidenceStrength = Math.max(62, evidenceStrength);
+  }
   const credibility = evidenceSnippets.length > 0 ? Math.max(40, sourceQuality) : 0;
   const evidenceCoverage = evidenceSnippets.length === 0 ? 0 : Math.min(100, Math.round((evidenceSnippets.length / 5) * 100));
   return { evidenceStrength, sourceQuality, credibility, evidenceCoverage };
@@ -456,7 +459,13 @@ const buildFinalAnswerWithDisagreement = (
   contradictionScore: number
 ): string => {
   if (contradictionScore <= 45 || outlierModels.length === 0) {
-    return representative.replace(/\s+/g, " ").replace(/\baccording to provided evidence\b/gi, "").replace(/\bwidely reported\b/gi, "").trim();
+    const cleaned = representative
+      .replace(/\s+/g, " ")
+      .replace(/\baccording to provided evidence\b/gi, "")
+      .replace(/\bwidely reported\b/gi, "")
+      .replace(/\bwhich is to have\b/gi, "with")
+      .trim();
+    return cleaned.endsWith(".") ? cleaned : `${cleaned}.`;
   }
 
   return `Most models (${listModels(majorityModels)}) support: ${representative}. Some responses differ (${listModels(outlierModels)}), so confidence is reduced.`;
@@ -510,9 +519,9 @@ const buildJudgeAssessment = (input: {
     allThreeAgree
       ? "All three AI models agree and no contradiction was detected."
       : judgeVerdict === "approved"
-        ? `The answer is strongly supported by model agreement and available evidence. Majority: ${listModels(input.majorityModels)}.`
+        ? `Strong cross-model agreement was detected. Supporting evidence aligns with the majority response and no material contradiction signals were found.`
         : judgeVerdict === "caution"
-          ? `The answer is usable with caution. Majority: ${listModels(input.majorityModels)}; outliers: ${listModels(input.outlierModels)}.`
+          ? `The answer is usable with caution. Majority models align, but evidence depth or contradiction risk lowers certainty.`
           : `The answer is not reliably supported yet. Contradictions or weak evidence materially reduce trust.`;
 
   return { judgeVerdict, judgeSummary, judgeRiskFlags: riskFlags };
@@ -627,6 +636,8 @@ const verifyClaims = (
     const hasExplicitContradiction = evidenceSnippets.length > 0 && contradictedByModels.length > 0 && modelSupportScore < 45;
     const status: ClaimVerification["status"] = hasExplicitContradiction
       ? "contradicted"
+      : strongModelConsensus && evidenceSnippets.length > 0 && evidenceScore >= 35
+        ? "supported"
       : evidenceScore >= 70 && modelSupportScore >= 70
         ? "supported"
         : evidenceScore >= 45 && modelSupportScore >= 55
@@ -639,7 +650,11 @@ const verifyClaims = (
       .map((entry) => entry.snippet);
 
     const contradictionPenaltyScore = hasExplicitContradiction ? 30 : 0;
-    const finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.45 + evidenceScore * 0.45 - contradictionPenaltyScore)));
+    let finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.5 + evidenceScore * 0.4 - contradictionPenaltyScore)));
+    if (status === "supported") finalConfidence = Math.max(75, finalConfidence);
+    if (status === "partially_supported") finalConfidence = Math.max(55, Math.min(75, finalConfidence));
+    if (status === "insufficient_evidence") finalConfidence = Math.min(55, Math.max(25, finalConfidence));
+    if (status === "contradicted") finalConfidence = Math.min(35, finalConfidence);
 
     const explanation = `Agreement ${modelSupportScore}/100, evidence ${evidenceScore}/100, contradiction penalty ${contradictionPenaltyScore}/100. Final claim confidence is ${finalConfidence}/100 (${status.replaceAll(
       "_",
@@ -671,7 +686,10 @@ export const buildResponsesForPrompt = async (
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
 }> => {
   const retrievalResult = await retrievalProvider.retrieve(prompt, retrievalLimitByMode(mode));
-  const evidenceSnippets = retrievalResult.snippets;
+  const evidenceSnippets = retrievalResult.snippets.map((snippet) => {
+    const normalizedQuality = Math.max(40, snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet));
+    return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
+  });
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
 
   const MODELS = OPENROUTER_MODELS.map((slot) => {
