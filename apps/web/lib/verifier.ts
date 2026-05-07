@@ -537,13 +537,26 @@ const claimStatusFromScore = (
   return "contradicted";
 };
 
+const clusterClaims = (claims: string[]): string[] => {
+  const clusters: string[] = [];
+  claims.forEach((claim) => {
+    const matchIndex = clusters.findIndex((existing) => similarity(existing, claim) >= 0.55);
+    if (matchIndex >= 0) {
+      if (claim.length > clusters[matchIndex].length) clusters[matchIndex] = claim;
+    } else {
+      clusters.push(claim);
+    }
+  });
+  return clusters;
+};
+
 const verifyClaims = (
   finalAnswer: string,
   responses: ModelResponse[],
   evidenceSnippets: EvidenceSnippet[],
   outlierModels: ModelName[]
 ): ClaimVerification[] => {
-  const claims = extractClaims(finalAnswer);
+  const claims = clusterClaims(extractClaims(finalAnswer));
 
   return claims.map((claim, index) => {
     const scoredEvidence = evidenceSnippets
@@ -573,19 +586,28 @@ const verifyClaims = (
         const responseSimilarity = similarity(claim, response.answer);
         const contradiction = contradictionPenalty(claim, response.answer);
         const isOutlier = outlierModels.includes(response.model);
-        return contradiction < 0 || (isOutlier && responseSimilarity < 0.2 && !strongModelConsensus);
+        return contradiction < 0 || (isOutlier && responseSimilarity < 0.15 && !strongModelConsensus);
       })
       .map((response) => response.model);
 
-    const status =
-      finalClaimScore < 35 && contradictedByModels.length > 0 ? "contradicted" : claimStatusFromScore(finalClaimScore);
+    const hasExplicitContradiction = evidenceSnippets.length > 0 && contradictedByModels.length > 0 && modelSupportScore < 45;
+    const status: ClaimVerification["status"] = hasExplicitContradiction
+      ? "contradicted"
+      : evidenceScore >= 70 && modelSupportScore >= 70
+        ? "supported"
+        : evidenceScore >= 45 && modelSupportScore >= 55
+          ? "partially_supported"
+          : "insufficient_evidence";
 
     const supportingEvidence = scoredEvidence
-      .filter((entry) => entry.score >= 0.3)
-      .slice(0, 2)
+      .filter((entry) => entry.score >= 0.25)
+      .slice(0, 3)
       .map((entry) => entry.snippet);
 
-    const explanation = `Best evidence support is ${evidenceScore}/100 and cross-model support is ${modelSupportScore}/100. Final claim confidence is ${finalClaimScore}/100 (${status.replaceAll(
+    const contradictionPenaltyScore = hasExplicitContradiction ? 30 : 0;
+    const finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.45 + evidenceScore * 0.45 - contradictionPenaltyScore)));
+
+    const explanation = `Agreement ${modelSupportScore}/100, evidence ${evidenceScore}/100, contradiction penalty ${contradictionPenaltyScore}/100. Final claim confidence is ${finalConfidence}/100 (${status.replaceAll(
       "_",
       " "
     )})${contradictedByModels.length > 0 ? `, with contradiction signals from ${listModels(contradictedByModels)}.` : "."}`;
@@ -594,8 +616,8 @@ const verifyClaims = (
       id: `claim-${index + 1}`,
       claim,
       status,
-      confidenceScore: finalClaimScore,
-      claimConfidenceScore: finalClaimScore,
+      confidenceScore: finalConfidence,
+      claimConfidenceScore: finalConfidence,
       supportingEvidence,
       contradictedByModels,
       explanation

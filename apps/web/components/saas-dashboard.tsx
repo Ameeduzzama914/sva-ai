@@ -416,7 +416,10 @@ ${evidenceReport}
                     <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2">
                       <p className="font-semibold text-slate-200">{snippet.title}</p>
                       <p className="mt-1 text-slate-400">{snippet.text}</p>
-                      <p className="mt-1 text-slate-300">{snippet.sourceDomain ?? "unknown domain"}</p>
+                      {snippet.sourceDomain ? <p className="mt-1 text-slate-300">{snippet.sourceDomain}</p> : null}
+                      <span className="mt-1 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-200">
+                        Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%
+                      </span>
                       {snippet.url ? (
                         <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
                           {snippet.url}
