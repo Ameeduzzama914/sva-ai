@@ -329,6 +329,18 @@ const computeEvidenceAlignment = (
   return Math.round(Math.max(0, Math.min(1, adjusted * 0.8 + qualityBoost * 0.2)) * 100);
 };
 
+const computeEvidenceMetrics = (
+  evidenceSnippets: EvidenceSnippet[],
+  majorityResponses: ModelResponse[],
+  outlierResponses: ModelResponse[]
+): { evidenceStrength: number; sourceQuality: number; credibility: number; evidenceCoverage: number } => {
+  const sourceQuality = computeSourceQualityScore(evidenceSnippets);
+  const evidenceStrength = computeEvidenceAlignment(majorityResponses, outlierResponses, evidenceSnippets, sourceQuality);
+  const credibility = evidenceSnippets.length > 0 ? Math.max(40, sourceQuality) : 0;
+  const evidenceCoverage = evidenceSnippets.length === 0 ? 0 : Math.min(100, Math.round((evidenceSnippets.length / 5) * 100));
+  return { evidenceStrength, sourceQuality, credibility, evidenceCoverage };
+};
+
 const contradictionMetrics = (
   responses: ModelResponse[],
   sharedCore: Set<string>
@@ -444,14 +456,10 @@ const buildFinalAnswerWithDisagreement = (
   contradictionScore: number
 ): string => {
   if (contradictionScore <= 45 || outlierModels.length === 0) {
-    return representative;
+    return representative.replace(/\s+/g, " ").replace(/\baccording to provided evidence\b/gi, "").replace(/\bwidely reported\b/gi, "").trim();
   }
 
-  return `Models disagree. Most responses (${listModels(
-    majorityModels
-  )}) support: "${representative}". However, outlier models (${listModels(
-    outlierModels
-  )}) indicate competing interpretations, so this answer should be treated with caution.`;
+  return `Most models (${listModels(majorityModels)}) support: ${representative}. Some responses differ (${listModels(outlierModels)}), so confidence is reduced.`;
 };
 
 const buildJudgeAssessment = (input: {
@@ -882,8 +890,9 @@ export const verifyResponses = (
   const agreementScore = (strongConsensus || (majorityModels.length === responses.length && responses.length >= 2)) ? Math.max(95, baselineAgreement) : baselineAgreement;
 
   const outlierResponses = responses.filter((response) => outlierModels.includes(response.model));
-  const sourceQualityScore = computeSourceQualityScore(evidenceSnippets);
-  const evidenceAlignmentScore = computeEvidenceAlignment(largestGroup, outlierResponses, evidenceSnippets, sourceQualityScore);
+  const evidenceMetrics = computeEvidenceMetrics(evidenceSnippets, largestGroup, outlierResponses);
+  const sourceQualityScore = evidenceMetrics.sourceQuality;
+  const evidenceAlignmentScore = evidenceMetrics.evidenceStrength;
   const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
   const queryType = detectQueryType(prompt || responses[0]?.answer || "");
@@ -1005,6 +1014,10 @@ export const verifyResponses = (
         evidence: evidenceAlignmentScore,
         source: sourceQualityScore,
         contradiction: contradiction.contradictionPenalty
+      },
+      evidenceScoreBreakdown: {
+        credibility: evidenceMetrics.credibility,
+        coverage: evidenceMetrics.evidenceCoverage
       }
     }
   };
