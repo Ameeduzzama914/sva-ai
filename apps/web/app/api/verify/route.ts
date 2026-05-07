@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
     const adjustedMode = validResponses.length < 3 && mode === "fast" ? "deep" : mode;
     const failedModelCount = providerFlow.responses.length - validResponses.length;
-    const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode, failedModelCount);
+    const verification = verifyResponses(validResponses, providerFlow.modelSources, safeEvidenceSnippets, adjustedMode, failedModelCount, prompt);
     let warnings: string[] = [];
 
     if (failedModelCount === 1) {

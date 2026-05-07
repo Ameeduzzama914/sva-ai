@@ -63,9 +63,9 @@ const HIGH_TRUST_DOMAINS = ["wikipedia.org", "britannica.com", "nasa.gov", "who.
 const MEDIUM_TRUST_HINTS = ["news", "blog", "magazine", "opinion", "guide"];
 
 const modeWeights: Record<VerificationMode, { agreement: number; evidence: number; source: number }> = {
-  fast: { agreement: 35, evidence: 35, source: 20 },
-  deep: { agreement: 35, evidence: 35, source: 20 },
-  research: { agreement: 35, evidence: 35, source: 20 }
+  fast: { agreement: 40, evidence: 30, source: 20 },
+  deep: { agreement: 40, evidence: 30, source: 20 },
+  research: { agreement: 40, evidence: 30, source: 20 }
 };
 
 const retrievalLimitByMode = (mode: VerificationMode): number => {
@@ -131,14 +131,37 @@ const numericAgreement = (a: Set<string>, b: Set<string>): number => {
   return jaccard(a, b);
 };
 
+const numericConsistencyScore = (a: string, b: string): number => {
+  const numsA = [...extractNumbers(a)].map(Number).filter((v) => Number.isFinite(v));
+  const numsB = [...extractNumbers(b)].map(Number).filter((v) => Number.isFinite(v));
+  if (numsA.length === 0 || numsB.length === 0) return 70;
+  const closest = numsA.flatMap((x) => numsB.map((y) => Math.abs(x - y))).sort((m, n) => m - n)[0] ?? 0;
+  if (closest <= 1) return 100;
+  if (closest <= 10) return 85;
+  if (closest <= 100) return 60;
+  return 20;
+};
+
 const contradictionPenalty = (a: string, b: string): number => {
   const aPositive = phraseSignal(a, POSITIVE_CUES);
   const aNegative = phraseSignal(a, NEGATIVE_CUES);
   const bPositive = phraseSignal(b, POSITIVE_CUES);
   const bNegative = phraseSignal(b, NEGATIVE_CUES);
 
-  const contradictory = (aPositive && bNegative) || (aNegative && bPositive);
+  const contradictory = ((aPositive && bNegative) || (aNegative && bPositive)) && numericConsistencyScore(a, b) < 70;
   return contradictory ? -0.35 : 0;
+};
+
+const detectQueryType = (prompt: string): "factual" | "opinion" | "medical" | "coding" | "financial" | "historical" | "scientific" | "unsafe_or_ambiguous" => {
+  const p = prompt.toLowerCase();
+  if (/\b(medical|diagnosis|treatment|symptom)\b/.test(p)) return "medical";
+  if (/\b(stock|invest|crypto|financial|price target)\b/.test(p)) return "financial";
+  if (/\b(code|typescript|python|bug|compile)\b/.test(p)) return "coding";
+  if (/\b(history|historical|war|century)\b/.test(p)) return "historical";
+  if (/\b(physics|chemistry|biology|scientific)\b/.test(p)) return "scientific";
+  if (/\b(opinion|best|should i)\b/.test(p)) return "opinion";
+  if (/\b(illegal|harm|attack)\b/.test(p)) return "unsafe_or_ambiguous";
+  return "factual";
 };
 
 const similarity = (a: string, b: string): number => {
@@ -243,7 +266,7 @@ const sourceQualityForSnippet = (snippet: EvidenceSnippet): number => {
   const text = `${snippet.title} ${snippet.text}`.toLowerCase();
 
   if (HIGH_TRUST_DOMAINS.some((item) => domain.includes(item) || text.includes(item.replace(".", "")))) {
-    return 88;
+    return domain.includes(".gov") || domain.includes(".edu") ? 95 : 88;
   }
 
   if (MEDIUM_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
@@ -254,7 +277,7 @@ const sourceQualityForSnippet = (snippet: EvidenceSnippet): number => {
     return 32;
   }
 
-  return 68;
+  return 58;
 };
 
 const computeSourceQualityScore = (evidenceSnippets: EvidenceSnippet[]): number => {
@@ -262,10 +285,11 @@ const computeSourceQualityScore = (evidenceSnippets: EvidenceSnippet[]): number 
     return 0;
   }
 
-  return Math.round(
+  const computed = Math.round(
     evidenceSnippets.reduce((sum, snippet) => sum + (snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet)), 0) /
       evidenceSnippets.length
   );
+  return Math.max(35, computed);
 };
 
 const computeEvidenceAlignment = (
@@ -373,7 +397,7 @@ const scoreConfidence = (
     finalScore = Math.min(finalScore, 70);
   }
   if (guardrails.noEvidence) {
-    finalScore = Math.min(finalScore, 65);
+    finalScore = Math.min(finalScore, 55);
   }
 
   if (finalScore >= 85) {
@@ -557,6 +581,7 @@ const verifyClaims = (
   outlierModels: ModelName[]
 ): ClaimVerification[] => {
   const claims = clusterClaims(extractClaims(finalAnswer));
+  console.log("SVA_DEBUG_CLAIMS", { extractedCount: claims.length, claims });
 
   return claims.map((claim, index) => {
     const scoredEvidence = evidenceSnippets
@@ -586,7 +611,8 @@ const verifyClaims = (
         const responseSimilarity = similarity(claim, response.answer);
         const contradiction = contradictionPenalty(claim, response.answer);
         const isOutlier = outlierModels.includes(response.model);
-        return contradiction < 0 || (isOutlier && responseSimilarity < 0.15 && !strongModelConsensus);
+        const explicitConflict = contradiction < 0 && responseSimilarity < 0.35;
+        return explicitConflict || (isOutlier && responseSimilarity < 0.15 && !strongModelConsensus);
       })
       .map((response) => response.model);
 
@@ -611,6 +637,7 @@ const verifyClaims = (
       "_",
       " "
     )})${contradictedByModels.length > 0 ? `, with contradiction signals from ${listModels(contradictedByModels)}.` : "."}`;
+    console.log("SVA_DEBUG_CLAIM_SCORE", { claim, evidenceScore, modelSupportScore, contradictionPenaltyScore, finalConfidence, status, contradictedByModels });
 
     return {
       id: `claim-${index + 1}`,
@@ -753,7 +780,8 @@ export const verifyResponses = (
   modelSources: PerModelSource[],
   evidenceSnippets: EvidenceSnippet[],
   mode: VerificationMode = "fast",
-  failedModelCount = 0
+  failedModelCount = 0,
+  prompt = ""
 ): VerificationResult => {
   const validResponses = responses.filter((response) => response.answer && response.answer.trim().length > 0);
 
@@ -858,6 +886,7 @@ export const verifyResponses = (
   const evidenceAlignmentScore = computeEvidenceAlignment(largestGroup, outlierResponses, evidenceSnippets, sourceQualityScore);
   const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
+  const queryType = detectQueryType(prompt || responses[0]?.answer || "");
   const allProvidersFallback = false;
   const noEvidence = evidenceSnippets.length === 0;
   const confidence = scoreConfidence(
@@ -875,8 +904,15 @@ export const verifyResponses = (
       weakSourceQuality: sourceQualityScore < 40
     }
   );
+  console.log("SVA_DEBUG_TRUST", { agreementScore, evidenceAlignmentScore, sourceQualityScore, contradictionScore: contradiction.contradictionScore, contradictionPenalty: contradiction.contradictionPenalty, mode });
   const availabilityPenalty = failedModelCount === 1 ? 5 : 0;
   let adjustedFinalConfidence = Math.max(0, confidence.score - availabilityPenalty);
+  if ((queryType === "medical" || queryType === "financial") && evidenceAlignmentScore < 65) {
+    adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 70);
+  }
+  if (contradiction.contradictionScore > 35 || agreementScore < 55) {
+    adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 58);
+  }
   if (strongConsensus) {
     adjustedFinalConfidence = Math.max(85, adjustedFinalConfidence);
   } else if (responses.length === 3 && majorityModels.length === 3) {
@@ -959,6 +995,17 @@ export const verifyResponses = (
         totalWeight: Math.round(totalWeight * 100) / 100
       },
       responseConsistencyScore: consistency.score
+      ,
+      semanticAgreement: agreementScore,
+      numericConsistency: responses.length >= 2 ? Math.round(numericConsistencyScore(responses[0].answer, responses[1].answer)) : 0,
+      evidenceCoverage: evidenceAlignmentScore,
+      contradictionReasons: outlierModels,
+      confidenceBreakdown: {
+        agreement: agreementScore,
+        evidence: evidenceAlignmentScore,
+        source: sourceQualityScore,
+        contradiction: contradiction.contradictionPenalty
+      }
     }
   };
 };
