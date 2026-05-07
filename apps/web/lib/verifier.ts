@@ -579,15 +579,35 @@ const claimStatusFromScore = (
 };
 
 const clusterClaims = (claims: string[]): string[] => {
+  const primaryEntity = (text: string): string => {
+    const tokens = tokenize(text).filter((token) => token.length > 3);
+    return tokens[0] ?? "";
+  };
+  const factualContext = (text: string): Set<string> =>
+    new Set(tokenize(text).filter((token) => ["mountain", "capital", "height", "elevation", "ocean", "speed", "tower", "sea", "level"].includes(token)));
+  const numericRelated = (a: string, b: string): boolean => {
+    const numsA = extractNumbers(a);
+    const numsB = extractNumbers(b);
+    if (numsA.size === 0 || numsB.size === 0) return false;
+    return numericAgreement(numsA, numsB) >= 0.5 || numericConsistencyScore(a, b) >= 85;
+  };
   const clusters: string[] = [];
   claims.forEach((claim) => {
     if (/^\d[\d,.\s]*(m|meters|km|feet|ft)?$/i.test(claim) && clusters.length > 0) {
       clusters[clusters.length - 1] = `${clusters[clusters.length - 1]} at approximately ${claim.replace(/\s+/g, " ").trim()}`;
       return;
     }
-    const matchIndex = clusters.findIndex((existing) => similarity(existing, claim) >= 0.55);
+    const matchIndex = clusters.findIndex((existing) => {
+      const sim = similarity(existing, claim);
+      const sameEntity = primaryEntity(existing) !== "" && primaryEntity(existing) === primaryEntity(claim);
+      const contextOverlap = jaccard(factualContext(existing), factualContext(claim)) >= 0.3;
+      const numericLink = numericRelated(existing, claim);
+      return sim >= 0.55 || (sameEntity && contextOverlap) || (sameEntity && numericLink);
+    });
     if (matchIndex >= 0) {
-      if (claim.length > clusters[matchIndex].length) clusters[matchIndex] = claim;
+      const existing = clusters[matchIndex];
+      const merged = `${existing.replace(/[.]$/, "")} ${claim.replace(/^[iI]t\s+/,"").replace(/^[tT]he\s+/,"")}`.replace(/\s+/g, " ");
+      clusters[matchIndex] = merged.length > existing.length ? merged : existing;
     } else {
       clusters.push(claim);
     }
