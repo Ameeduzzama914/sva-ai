@@ -581,6 +581,10 @@ const claimStatusFromScore = (
 const clusterClaims = (claims: string[]): string[] => {
   const clusters: string[] = [];
   claims.forEach((claim) => {
+    if (/^\d[\d,.\s]*(m|meters|km|feet|ft)?$/i.test(claim) && clusters.length > 0) {
+      clusters[clusters.length - 1] = `${clusters[clusters.length - 1]} at approximately ${claim.replace(/\s+/g, " ").trim()}`;
+      return;
+    }
     const matchIndex = clusters.findIndex((existing) => similarity(existing, claim) >= 0.55);
     if (matchIndex >= 0) {
       if (claim.length > clusters[matchIndex].length) clusters[matchIndex] = claim;
@@ -651,7 +655,7 @@ const verifyClaims = (
 
     const contradictionPenaltyScore = hasExplicitContradiction ? 30 : 0;
     let finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.5 + evidenceScore * 0.4 - contradictionPenaltyScore)));
-    if (status === "supported") finalConfidence = Math.max(75, finalConfidence);
+    if (status === "supported") finalConfidence = Math.max(78, finalConfidence);
     if (status === "partially_supported") finalConfidence = Math.max(55, Math.min(75, finalConfidence));
     if (status === "insufficient_evidence") finalConfidence = Math.min(55, Math.max(25, finalConfidence));
     if (status === "contradicted") finalConfidence = Math.min(35, finalConfidence);
@@ -941,9 +945,9 @@ export const verifyResponses = (
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 58);
   }
   if (strongConsensus) {
-    adjustedFinalConfidence = Math.max(85, adjustedFinalConfidence);
+    adjustedFinalConfidence = Math.max(evidenceAlignmentScore >= 60 ? 85 : 75, adjustedFinalConfidence);
   } else if (responses.length === 3 && majorityModels.length === 3) {
-    adjustedFinalConfidence = Math.max(75, adjustedFinalConfidence);
+    adjustedFinalConfidence = Math.max(evidenceAlignmentScore >= 50 ? 72 : 65, adjustedFinalConfidence);
   }
   if (responses.length === 2 && majorityModels.length === 2 && failedModelCount === 1) {
     adjustedFinalConfidence = Math.max(65, adjustedFinalConfidence);
@@ -955,11 +959,11 @@ export const verifyResponses = (
     contradiction.contradictionScore
   );
 
-  const reasoning = `${largestGroup.length}/${responses.length} model responses clustered into the majority (weighted agreement ${agreementScore}/100). Majority models: ${listModels(
+  const reasoning = `All models were compared semantically. ${largestGroup.length}/${responses.length} responses clustered into the majority (agreement ${agreementScore}/100). Majority models: ${listModels(
     majorityModels
   )}. Outliers: ${listModels(
     outlierModels
-  )}. Evidence alignment: ${evidenceAlignmentScore}/100. Source quality: ${sourceQualityScore}/100. Contradiction score: ${contradiction.contradictionScore}/100 (penalty ${contradiction.contradictionPenalty}).`;
+  )}. Evidence alignment: ${evidenceAlignmentScore}/100 and source quality: ${sourceQualityScore}/100. Contradiction score: ${contradiction.contradictionScore}/100 (penalty ${contradiction.contradictionPenalty}).`;
 
   const explanation = `I compared ${responses.length} model responses and found ${majorityModels.length} in the majority group: ${listModels(
     majorityModels
