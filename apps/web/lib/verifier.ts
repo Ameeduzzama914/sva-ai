@@ -335,7 +335,10 @@ const computeEvidenceMetrics = (
   outlierResponses: ModelResponse[]
 ): { evidenceStrength: number; sourceQuality: number; credibility: number; evidenceCoverage: number } => {
   const sourceQuality = computeSourceQualityScore(evidenceSnippets);
-  const evidenceStrength = computeEvidenceAlignment(majorityResponses, outlierResponses, evidenceSnippets, sourceQuality);
+  let evidenceStrength = computeEvidenceAlignment(majorityResponses, outlierResponses, evidenceSnippets, sourceQuality);
+  if (majorityResponses.length >= 2 && outlierResponses.length === 0 && evidenceSnippets.length > 0) {
+    evidenceStrength = Math.max(62, evidenceStrength);
+  }
   const credibility = evidenceSnippets.length > 0 ? Math.max(40, sourceQuality) : 0;
   const evidenceCoverage = evidenceSnippets.length === 0 ? 0 : Math.min(100, Math.round((evidenceSnippets.length / 5) * 100));
   return { evidenceStrength, sourceQuality, credibility, evidenceCoverage };
@@ -627,6 +630,8 @@ const verifyClaims = (
     const hasExplicitContradiction = evidenceSnippets.length > 0 && contradictedByModels.length > 0 && modelSupportScore < 45;
     const status: ClaimVerification["status"] = hasExplicitContradiction
       ? "contradicted"
+      : strongModelConsensus && evidenceSnippets.length > 0 && evidenceScore >= 35
+        ? "supported"
       : evidenceScore >= 70 && modelSupportScore >= 70
         ? "supported"
         : evidenceScore >= 45 && modelSupportScore >= 55
@@ -671,7 +676,10 @@ export const buildResponsesForPrompt = async (
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
 }> => {
   const retrievalResult = await retrievalProvider.retrieve(prompt, retrievalLimitByMode(mode));
-  const evidenceSnippets = retrievalResult.snippets;
+  const evidenceSnippets = retrievalResult.snippets.map((snippet) => {
+    const normalizedQuality = Math.max(40, snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet));
+    return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
+  });
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
 
   const MODELS = OPENROUTER_MODELS.map((slot) => {
