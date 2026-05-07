@@ -63,9 +63,9 @@ const HIGH_TRUST_DOMAINS = ["wikipedia.org", "britannica.com", "nasa.gov", "who.
 const MEDIUM_TRUST_HINTS = ["news", "blog", "magazine", "opinion", "guide"];
 
 const modeWeights: Record<VerificationMode, { agreement: number; evidence: number; source: number }> = {
-  fast: { agreement: 35, evidence: 40, source: 25 },
-  deep: { agreement: 30, evidence: 50, source: 20 },
-  research: { agreement: 20, evidence: 60, source: 20 }
+  fast: { agreement: 35, evidence: 35, source: 20 },
+  deep: { agreement: 35, evidence: 35, source: 20 },
+  research: { agreement: 35, evidence: 35, source: 20 }
 };
 
 const retrievalLimitByMode = (mode: VerificationMode): number => {
@@ -334,7 +334,7 @@ const contradictionMetrics = (
   }
 
   const contradictionScore = Math.round((conflictSum / pairs) * 100);
-  const contradictionPenaltyScore = Math.round((contradictionScore / 100) * 28);
+  const contradictionPenaltyScore = Math.round((contradictionScore / 100) * 40);
   return { contradictionScore, contradictionPenalty: contradictionPenaltyScore };
 };
 
@@ -376,11 +376,15 @@ const scoreConfidence = (
     finalScore = Math.min(finalScore, 65);
   }
 
-  if (finalScore >= 78) {
+  if (finalScore >= 85) {
+    return { score: finalScore, label: "Very High" };
+  }
+
+  if (finalScore >= 70) {
     return { score: finalScore, label: "High" };
   }
 
-  if (finalScore >= 62) {
+  if (finalScore >= 40) {
     return { score: finalScore, label: "Medium" };
   }
 
@@ -895,7 +899,7 @@ export const verifyResponses = (
     agreementScore,
     evidenceAlignmentScore,
     finalConfidenceScore: adjustedFinalConfidence,
-    confidenceLabel: adjustedFinalConfidence >= 75 ? "High" : adjustedFinalConfidence >= 45 ? "Medium" : "Low",
+    confidenceLabel: adjustedFinalConfidence >= 85 ? "Very High" : adjustedFinalConfidence >= 70 ? "High" : adjustedFinalConfidence >= 40 ? "Medium" : "Low",
     finalAnswer,
     majorityModels,
     outlierModels,

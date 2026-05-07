@@ -1,116 +1,82 @@
 import type { EvidenceSnippet } from "./models";
 import type { RetrievalProvider, RetrievalResult } from "./retrieval";
 
-interface SerperOrganicResult {
-  title?: string;
-  snippet?: string;
-  link?: string;
+type SearchItem = { title: string; url: string; snippet: string };
+
+const parseDomain = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "unknown";
+  }
+};
+
+class SourceScorer {
+  score(domain: string, index: number): { relevanceScore: number; credibilityScore: number } {
+    const trusted = ["wikipedia.org", ".gov", ".edu", "britannica.com", "reuters.com", "apnews.com"];
+    const credibilityScore = trusted.some((item) => domain.includes(item)) ? 90 : 65;
+    const relevanceScore = Math.max(45, 100 - index * 10);
+    return { relevanceScore, credibilityScore };
+  }
 }
 
-const asString = (value: unknown): string | undefined => {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const parseOrganicResults = (payload: unknown): SerperOrganicResult[] => {
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const root = payload as Record<string, unknown>;
-  if (!Array.isArray(root.organic)) {
-    return [];
-  }
-
-  return root.organic.reduce<SerperOrganicResult[]>((acc, entry) => {
-    if (!entry || typeof entry !== "object") {
-      return acc;
+class EvidenceFetcher {
+  async fetch(prompt: string, limit: number): Promise<SearchItem[]> {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (tavilyKey) {
+      const response = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: tavilyKey, query: prompt, max_results: limit })
+      });
+      if (!response.ok) return [];
+      const data = (await response.json()) as { results?: Array<{ title?: string; url?: string; content?: string }> };
+      return (data.results ?? [])
+        .map((r) => ({ title: r.title?.trim() ?? "", url: r.url?.trim() ?? "", snippet: r.content?.trim() ?? "" }))
+        .filter((r) => r.title && r.url && r.snippet);
     }
 
-    const item = entry as Record<string, unknown>;
-    acc.push({
-      title: asString(item.title),
-      snippet: asString(item.snippet),
-      link: asString(item.link)
+    const serperKey = process.env.WEB_RETRIEVAL_API_KEY;
+    const endpoint = process.env.WEB_RETRIEVAL_ENDPOINT;
+    if (!serperKey || !endpoint) return [];
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+      body: JSON.stringify({ q: prompt, num: limit })
     });
-    return acc;
-  }, []);
-};
-
-const scoreByPosition = (index: number): number => Math.max(35, 100 - index * 12);
-
-const normalizeSnippet = (candidate: SerperOrganicResult, index: number): EvidenceSnippet | null => {
-  const text = asString(candidate.snippet);
-  if (!text) {
-    return null;
+    if (!response.ok) return [];
+    const data = (await response.json()) as { organic?: Array<{ title?: string; link?: string; snippet?: string }> };
+    return (data.organic ?? [])
+      .map((r) => ({ title: r.title?.trim() ?? "", url: r.link?.trim() ?? "", snippet: r.snippet?.trim() ?? "" }))
+      .filter((r) => r.title && r.url && r.snippet);
   }
-
-  const title = asString(candidate.title) || `Web source ${index + 1}`;
-  const url = asString(candidate.link);
-
-  return {
-    title,
-    text,
-    sourceType: "web_search",
-    sourceId: url || `web-${index + 1}`,
-    url,
-    relevanceScore: scoreByPosition(index)
-  };
-};
+}
 
 export class WebRetrievalProvider implements RetrievalProvider {
-  async retrieve(prompt: string, limit = 4): Promise<RetrievalResult> {
-    const endpoint = process.env.WEB_RETRIEVAL_ENDPOINT;
-    const apiKey = process.env.WEB_RETRIEVAL_API_KEY;
+  private readonly fetcher = new EvidenceFetcher();
+  private readonly scorer = new SourceScorer();
 
-    if (!endpoint || !apiKey) {
-      return { snippets: [], retrievalModeUsed: "web", fallbackToMock: false };
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-
+  async retrieve(prompt: string, limit = 5): Promise<RetrievalResult> {
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-KEY": apiKey
-        },
-        body: JSON.stringify({
-          q: prompt,
-          num: limit
-        }),
-        signal: controller.signal
+      const items = await this.fetcher.fetch(prompt, limit);
+      const snippets: EvidenceSnippet[] = items.slice(0, limit).map((item, index) => {
+        const sourceDomain = parseDomain(item.url);
+        const { relevanceScore, credibilityScore } = this.scorer.score(sourceDomain, index);
+        return {
+          title: item.title,
+          text: item.snippet,
+          url: item.url,
+          sourceDomain,
+          sourceType: "web_search",
+          sourceId: item.url,
+          relevanceScore,
+          sourceQualityScore: credibilityScore,
+          credibilityScore
+        };
       });
-
-      if (!response.ok) {
-        return { snippets: [], retrievalModeUsed: "web", fallbackToMock: false };
-      }
-
-      const payload = (await response.json()) as unknown;
-      const parsed = parseOrganicResults(payload)
-        .map((candidate, index) => normalizeSnippet(candidate, index))
-        .filter((item): item is EvidenceSnippet => Boolean(item));
-
-      const deduped = parsed.filter((snippet, index, arr) => {
-        const key = snippet.url || snippet.title;
-        return arr.findIndex((entry) => (entry.url || entry.title) === key) === index;
-      });
-
-      return {
-        snippets: deduped.slice(0, limit),
-        retrievalModeUsed: "web",
-        fallbackToMock: false
-      };
+      return { snippets, retrievalModeUsed: "web", fallbackToMock: false };
     } catch {
       return { snippets: [], retrievalModeUsed: "web", fallbackToMock: false };
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }

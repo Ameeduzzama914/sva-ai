@@ -105,8 +105,10 @@ export const SaasDashboard = () => {
   const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
   const trustScore = verification?.finalConfidenceScore ?? 0;
   const trustLabel =
-    verification?.confidenceLabel === "High"
+    verification?.confidenceLabel === "Very High"
       ? "Highly Reliable"
+      : verification?.confidenceLabel === "High"
+        ? "Highly Reliable"
       : verification?.confidenceLabel === "Medium"
         ? "Moderately Reliable"
         : verification?.confidenceLabel === "Low"
@@ -414,6 +416,7 @@ ${evidenceReport}
                     <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2">
                       <p className="font-semibold text-slate-200">{snippet.title}</p>
                       <p className="mt-1 text-slate-400">{snippet.text}</p>
+                      <p className="mt-1 text-slate-300">{snippet.sourceDomain ?? "unknown domain"}</p>
                       {snippet.url ? (
                         <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
                           {snippet.url}
