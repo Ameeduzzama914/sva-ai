@@ -113,6 +113,42 @@ export const SaasDashboard = () => {
           ? "Low Reliability"
           : "Awaiting verification";
 
+  const handleCopyAnswer = async () => {
+    if (!verification?.finalAnswer) return;
+    await navigator.clipboard.writeText(verification.finalAnswer);
+  };
+
+  const handleExportReport = () => {
+    if (!verification) return;
+    const modelReport = visibleModels
+      .map((model) => {
+        const response = responses.find((item) => item.model === model)?.answer ?? "Model unavailable";
+        return `- ${model}: ${response}`;
+      })
+      .join("\n");
+    const evidenceReport = evidenceSnippets.slice(0, 5).map((item, idx) => `${idx + 1}. ${item.title} (${item.relevanceScore}%)`).join("\n") || "No evidence sources returned.";
+    const report = `SVA Verification Report
+
+Question: ${prompt}
+Final Answer: ${verification.finalAnswer}
+Confidence Score: ${verification.finalConfidenceScore}/100
+Verdict: ${(verification.judgeVerdict ?? "caution").toUpperCase()}
+
+Model Responses:
+${modelReport}
+
+Evidence Summary:
+${evidenceReport}
+`;
+    const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "sva-verification-report.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-[#0B0F1A] text-slate-100">
       <div className="mx-auto flex max-w-[1600px]">
@@ -289,6 +325,13 @@ export const SaasDashboard = () => {
                     </div>
                   ))}
                 </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">
+                  <p className="font-semibold text-slate-100">Why this score?</p>
+                  <p className="mt-1">Model agreement: {verification?.agreementScore ?? 0}% — how closely the AI answers match.</p>
+                  <p>Evidence strength: {verification?.evidenceAlignmentScore ?? 0}% — how well external sources support the answer.</p>
+                  <p>Contradiction score: {verification?.contradictionScore ?? 0}% — lower is better.</p>
+                  <p>Source quality: {verification?.sourceQualityScore ?? 0}% — trust level of retrieved sources.</p>
+                </div>
               </div>
             </Card>
           </div>
@@ -311,10 +354,10 @@ export const SaasDashboard = () => {
               <li>{isDemoMode ? "Key takeaways will appear after live provider responses are available." : verification?.reasoning ?? "Key takeaways appear after verification completes."}</li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="primary" type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
+              <Button variant="primary" type="button" onClick={handleCopyAnswer} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
                 Copy Answer
               </Button>
-              <Button type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
+              <Button type="button" onClick={handleExportReport} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
                 Export
               </Button>
               <Button variant="ghost" type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
@@ -340,7 +383,7 @@ export const SaasDashboard = () => {
                     {isDemoMode ? (
                       <tr>
                         <td className="px-2 py-3 text-slate-400" colSpan={5}>
-                          Claim-level verification will appear here after live provider responses are connected.
+                          Claims will appear after verification.
                         </td>
                       </tr>
                     ) : (
@@ -363,7 +406,7 @@ export const SaasDashboard = () => {
             <Card title="Evidence Panel">
               {isDemoMode ? (
                 <p className="text-xs text-slate-400">
-                  Evidence sources will appear here after live providers or web retrieval are connected.
+                  Evidence sources will appear after verification.
                 </p>
               ) : evidenceSnippets.length ? (
                 <div className="space-y-3 text-xs">
@@ -383,13 +426,13 @@ export const SaasDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">{isLoading ? "Fetching evidence..." : "No evidence yet."}</p>
+                <p className="text-xs text-slate-400">{isLoading ? "Fetching evidence..." : "Evidence sources will appear after verification."}</p>
               )}
             </Card>
             <Card title="Contradictions">
               <p className="text-sm text-slate-300">{isDemoMode ? "No live contradiction analysis yet. Connect providers to compare real model outputs." : `Contradiction score: ${verification?.contradictionScore ?? 0}%`}</p>
               <p className="mt-2 text-xs text-slate-400">
-                {isDemoMode ? "Live mode: contradiction scoring is disabled for fallback-only runs." : meta?.providerMessage ?? "Provider state appears here after verification."}
+                {isDemoMode ? "Contradictions will appear only if models disagree." : meta?.providerMessage ?? "Contradictions will appear only if models disagree."}
               </p>
             </Card>
           </div>

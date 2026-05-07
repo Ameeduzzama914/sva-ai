@@ -179,6 +179,9 @@ const hasCoreAgreement = (answer: string, sharedCore: Set<string>): boolean => {
   return matches >= 1;
 };
 
+const isStrongConsensus = (responses: ModelResponse[], sharedCore: Set<string>): boolean =>
+  responses.length >= 3 && responses.every((response) => hasCoreAgreement(response.answer, sharedCore));
+
 const buildContextPrompt = (prompt: string, evidenceSnippets: EvidenceSnippet[]): string => {
   const context = evidenceSnippets
     .map((snippet, index) => `${index + 1}. ${snippet.title} (relevance ${snippet.relevanceScore}/100): ${snippet.text}`)
@@ -458,18 +461,23 @@ const buildJudgeAssessment = (input: {
   }
 
   let judgeVerdict: "approved" | "caution" | "rejected" = "approved";
-  if (input.finalConfidenceScore < 50 || input.contradictionScore > 70 || input.evidenceAlignmentScore < 20) {
+  const allThreeAgree = input.majorityModels.length >= 3 && input.outlierModels.length === 0 && input.contradictionScore <= 10;
+  if (allThreeAgree) {
+    judgeVerdict = "approved";
+  } else if (input.finalConfidenceScore < 60 || input.contradictionScore > 35) {
     judgeVerdict = "rejected";
-  } else if (riskFlags.length > 0 || input.finalConfidenceScore < 70) {
+  } else if (input.finalConfidenceScore < 80) {
     judgeVerdict = "caution";
   }
 
   const judgeSummary =
-    judgeVerdict === "approved"
-      ? `The answer is reasonably well-supported by evidence and model agreement. Majority: ${listModels(input.majorityModels)}.`
-      : judgeVerdict === "caution"
-        ? `The answer is usable with caution. Majority: ${listModels(input.majorityModels)}; outliers: ${listModels(input.outlierModels)}.`
-        : `The answer is not reliably supported yet. Contradictions or weak evidence materially reduce trust.`;
+    allThreeAgree
+      ? "All three AI models agree and no contradiction was detected."
+      : judgeVerdict === "approved"
+        ? `The answer is strongly supported by model agreement and available evidence. Majority: ${listModels(input.majorityModels)}.`
+        : judgeVerdict === "caution"
+          ? `The answer is usable with caution. Majority: ${listModels(input.majorityModels)}; outliers: ${listModels(input.outlierModels)}.`
+          : `The answer is not reliably supported yet. Contradictions or weak evidence materially reduce trust.`;
 
   return { judgeVerdict, judgeSummary, judgeRiskFlags: riskFlags };
 };
@@ -550,14 +558,18 @@ const verifyClaims = (
     const modelSupportScore = Math.round(
       responses.reduce((sum, response) => sum + similarity(claim, response.answer), 0) / Math.max(1, responses.length) * 100
     );
-    const finalClaimScore = Math.round(evidenceScore * 0.6 + modelSupportScore * 0.4);
+    let finalClaimScore = Math.round(evidenceScore * 0.6 + modelSupportScore * 0.4);
+    const strongModelConsensus = responses.length >= 3 && responses.every((response) => similarity(claim, response.answer) >= 0.35);
+    if (strongModelConsensus && evidenceScore >= 20) {
+      finalClaimScore = Math.max(finalClaimScore, 82);
+    }
 
     const contradictedByModels = responses
       .filter((response) => {
         const responseSimilarity = similarity(claim, response.answer);
         const contradiction = contradictionPenalty(claim, response.answer);
         const isOutlier = outlierModels.includes(response.model);
-        return contradiction < 0 || (isOutlier && responseSimilarity < 0.2);
+        return contradiction < 0 || (isOutlier && responseSimilarity < 0.2 && !strongModelConsensus);
       })
       .map((response) => response.model);
 
@@ -639,7 +651,7 @@ export const buildResponsesForPrompt = async (
   const responses: ModelResponse[] = MODELS.map((m, i) => {
     const result = outputs[i];
     if (result && result.ok === true) {
-      return { model: m.name, answer: result.text?.trim() || "No response generated." };
+      return { model: m.name, answer: result.text?.replace(/\s+/g, " ").trim() || "No response generated." };
     }
 
     return {
@@ -764,6 +776,7 @@ export const verifyResponses = (
 
   responses = validResponses;
   const sharedCore = inferSharedCoreAnswer(responses);
+  const strongConsensus = isStrongConsensus(responses, sharedCore);
   const groups: ModelResponse[][] = [];
   const groupScores: Array<{ model: ModelName; bestGroupScore: number; assignedGroupIndex: number }> = [];
 
@@ -812,12 +825,12 @@ export const verifyResponses = (
     return sum + getModelWeight(modelSource);
   }, 0);
   const baselineAgreement = totalWeight === 0 ? 0 : Math.round((majorityWeight / totalWeight) * 100);
-  const agreementScore = majorityModels.length === responses.length && responses.length >= 2 ? Math.max(95, baselineAgreement) : baselineAgreement;
+  const agreementScore = (strongConsensus || (majorityModels.length === responses.length && responses.length >= 2)) ? Math.max(95, baselineAgreement) : baselineAgreement;
 
   const outlierResponses = responses.filter((response) => outlierModels.includes(response.model));
   const sourceQualityScore = computeSourceQualityScore(evidenceSnippets);
   const evidenceAlignmentScore = computeEvidenceAlignment(largestGroup, outlierResponses, evidenceSnippets, sourceQualityScore);
-  const contradiction = contradictionMetrics(responses, sharedCore);
+  const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
   const allProvidersFallback = false;
   const noEvidence = evidenceSnippets.length === 0;
@@ -838,8 +851,10 @@ export const verifyResponses = (
   );
   const availabilityPenalty = failedModelCount === 1 ? 5 : 0;
   let adjustedFinalConfidence = Math.max(0, confidence.score - availabilityPenalty);
-  if (responses.length === 3 && majorityModels.length === 3) {
-    adjustedFinalConfidence = Math.max(70, adjustedFinalConfidence);
+  if (strongConsensus) {
+    adjustedFinalConfidence = Math.max(85, adjustedFinalConfidence);
+  } else if (responses.length === 3 && majorityModels.length === 3) {
+    adjustedFinalConfidence = Math.max(75, adjustedFinalConfidence);
   }
   if (responses.length === 2 && majorityModels.length === 2 && failedModelCount === 1) {
     adjustedFinalConfidence = Math.max(65, adjustedFinalConfidence);

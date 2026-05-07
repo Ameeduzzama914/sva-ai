@@ -9,7 +9,7 @@ type AppSidebarProps = {
 
 export const AppSidebar = ({ contradictionCount = 0 }: AppSidebarProps) => {
   return (
-    <aside className="w-[260px] border-r border-slate-800 bg-[#0b1020] p-4">
+    <aside className="hidden w-[260px] border-r border-slate-800 bg-[#0b1020] p-4 lg:block">
       <div className="mb-8">
         <h1 className="text-lg font-bold text-white">SVA</h1>
         <p className="text-xs text-slate-400">Super Verified AI</p>
@@ -59,8 +59,10 @@ export const AppSidebar = ({ contradictionCount = 0 }: AppSidebarProps) => {
       </div>
 
       <div className="mt-8 rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-blue-500/10 p-4">
-        <p className="text-sm font-semibold text-slate-100">SVA Pro</p>
-        <p className="mt-1 text-xs text-slate-300">Unlock deep verification and higher daily usage.</p>
+        <p className="text-sm font-semibold text-slate-100">Plans</p>
+        <p className="mt-2 text-xs text-slate-300"><strong>Free:</strong> 10 verifications/day · 3 AI model comparison</p>
+        <p className="mt-2 text-xs text-slate-300"><strong>Pro — Coming Soon (₹499/month):</strong> 50 verifications/day · deeper verification · saved history</p>
+        <p className="mt-2 text-xs text-slate-300"><strong>Plus — Coming Soon (₹999/month):</strong> unlimited verifications · advanced models · priority verification · export/share tools</p>
         <Button variant="primary" className="mt-3 w-full">
           Upgrade Plan
         </Button>
