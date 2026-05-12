@@ -452,6 +452,20 @@ const responseConsistencyAdjustment = (responses: ModelResponse[]): { adjustment
   return { adjustment, score };
 };
 
+const uncertaintyDivergenceScore = (responses: ModelResponse[]): number => {
+  const strong = /\b(definitely|certainly|always|proven|confirmed)\b/i;
+  const cautious = /\b(likely|probably|may|might|unclear|insufficient evidence|unknown)\b/i;
+  let strongCount = 0;
+  let cautiousCount = 0;
+  responses.forEach((response) => {
+    if (strong.test(response.answer)) strongCount += 1;
+    if (cautious.test(response.answer)) cautiousCount += 1;
+  });
+  if (strongCount > 0 && cautiousCount > 0) return 75;
+  if (cautiousCount > 0) return 45;
+  return 10;
+};
+
 const buildFinalAnswerWithDisagreement = (
   representative: string,
   majorityModels: ModelName[],
@@ -943,6 +957,7 @@ export const verifyResponses = (
   const evidenceAlignmentScore = evidenceMetrics.evidenceStrength;
   const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
+  const divergenceScore = uncertaintyDivergenceScore(responses);
   const queryType = detectQueryType(prompt || responses[0]?.answer || "");
   const allProvidersFallback = false;
   const noEvidence = evidenceSnippets.length === 0;
@@ -963,12 +978,15 @@ export const verifyResponses = (
   );
   console.log("SVA_DEBUG_TRUST", { agreementScore, evidenceAlignmentScore, sourceQualityScore, contradictionScore: contradiction.contradictionScore, contradictionPenalty: contradiction.contradictionPenalty, mode });
   const availabilityPenalty = failedModelCount === 1 ? 5 : 0;
-  let adjustedFinalConfidence = Math.max(0, confidence.score - availabilityPenalty);
+  let adjustedFinalConfidence = Math.max(0, confidence.score - availabilityPenalty - Math.round(divergenceScore * 0.08));
   if ((queryType === "medical" || queryType === "financial") && evidenceAlignmentScore < 65) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 70);
   }
   if (contradiction.contradictionScore > 35 || agreementScore < 55) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 58);
+  }
+  if (evidenceAlignmentScore < 40 && sourceQualityScore < 45) {
+    adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 52);
   }
   if (strongConsensus) {
     adjustedFinalConfidence = Math.max(evidenceAlignmentScore >= 60 ? 85 : 75, adjustedFinalConfidence);
@@ -1073,7 +1091,8 @@ export const verifyResponses = (
         entities: [...extractEntities(item.answer)],
         numbers: [...extractNumbers(item.answer)],
         claims: clusterClaims(extractClaims(item.answer))
-      }))
+      })),
+      uncertaintyDivergence: divergenceScore
     }
   };
 };
