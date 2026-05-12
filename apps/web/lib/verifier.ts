@@ -784,7 +784,9 @@ export const buildResponsesForPrompt = async (
       fallbackState: outputs[0]?.ok === true ? "none" : outputs[0]?.reason === "not_configured" ? "provider_unavailable" : "provider_error",
       errorMessage: getOpenRouterErrorMessage(outputs[0]),
       statusCode: getOpenRouterErrorStatus(outputs[0]),
-      providerModelId: outputs[0]?.providerModelId
+      providerModelId: outputs[0]?.providerModelId,
+      status: outputs[0]?.ok === true ? "success" : "failed",
+      rawResponse: outputs[0]?.ok === true ? outputs[0].text.slice(0, 1200) : undefined
     },
     "Balanced AI": {
       configured: Boolean(process.env.OPENROUTER_API_KEY),
@@ -793,7 +795,9 @@ export const buildResponsesForPrompt = async (
       fallbackState: outputs[1]?.ok === true ? "none" : outputs[1]?.reason === "not_configured" ? "provider_unavailable" : "provider_error",
       errorMessage: getOpenRouterErrorMessage(outputs[1]),
       statusCode: getOpenRouterErrorStatus(outputs[1]),
-      providerModelId: outputs[1]?.providerModelId
+      providerModelId: outputs[1]?.providerModelId,
+      status: outputs[1]?.ok === true ? "success" : "failed",
+      rawResponse: outputs[1]?.ok === true ? outputs[1].text.slice(0, 1200) : undefined
     },
     "Research AI": {
       configured: Boolean(process.env.OPENROUTER_API_KEY),
@@ -802,7 +806,9 @@ export const buildResponsesForPrompt = async (
       fallbackState: outputs[2]?.ok === true ? "none" : outputs[2]?.reason === "not_configured" ? "provider_unavailable" : "provider_error",
       errorMessage: getOpenRouterErrorMessage(outputs[2]),
       statusCode: getOpenRouterErrorStatus(outputs[2]),
-      providerModelId: outputs[2]?.providerModelId
+      providerModelId: outputs[2]?.providerModelId,
+      status: outputs[2]?.ok === true ? "success" : "failed",
+      rawResponse: outputs[2]?.ok === true ? outputs[2].text.slice(0, 1200) : undefined
     }
   };
 
@@ -1060,7 +1066,14 @@ export const verifyResponses = (
       evidenceScoreBreakdown: {
         credibility: evidenceMetrics.credibility,
         coverage: evidenceMetrics.evidenceCoverage
-      }
+      },
+      normalizedResponses: responses.map((item) => ({
+        model: item.model,
+        answer: item.answer,
+        entities: [...extractEntities(item.answer)],
+        numbers: [...extractNumbers(item.answer)],
+        claims: clusterClaims(extractClaims(item.answer))
+      }))
     }
   };
 };
