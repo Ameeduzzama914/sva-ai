@@ -466,6 +466,24 @@ const uncertaintyDivergenceScore = (responses: ModelResponse[]): number => {
   return 10;
 };
 
+const temporalAndHallucinationPenalty = (responses: ModelResponse[], evidenceSnippets: EvidenceSnippet[]): { temporalPenalty: number; hallucinationPenalty: number; reasons: string[] } => {
+  const reasons: string[] = [];
+  const years = responses.flatMap((response) => [...extractNumbers(response.answer)].map(Number).filter((n) => n >= 1900 && n <= 2100));
+  const hasWideYearSpread = years.length >= 2 && Math.max(...years) - Math.min(...years) >= 5;
+  const hasNoEvidence = evidenceSnippets.length === 0;
+  let temporalPenalty = 0;
+  let hallucinationPenalty = 0;
+  if (hasWideYearSpread) {
+    temporalPenalty = 12;
+    reasons.push("temporal_inconsistency");
+  }
+  if (hasNoEvidence && responses.some((response) => /\b(definitely|confirmed|proven)\b/i.test(response.answer))) {
+    hallucinationPenalty = 10;
+    reasons.push("unsupported_certainty");
+  }
+  return { temporalPenalty, hallucinationPenalty, reasons };
+};
+
 const buildFinalAnswerWithDisagreement = (
   representative: string,
   majorityModels: ModelName[],
@@ -958,6 +976,7 @@ export const verifyResponses = (
   const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
   const divergenceScore = uncertaintyDivergenceScore(responses);
+  const temporalHallucination = temporalAndHallucinationPenalty(responses, evidenceSnippets);
   const queryType = detectQueryType(prompt || responses[0]?.answer || "");
   const allProvidersFallback = false;
   const noEvidence = evidenceSnippets.length === 0;
@@ -978,7 +997,10 @@ export const verifyResponses = (
   );
   console.log("SVA_DEBUG_TRUST", { agreementScore, evidenceAlignmentScore, sourceQualityScore, contradictionScore: contradiction.contradictionScore, contradictionPenalty: contradiction.contradictionPenalty, mode });
   const availabilityPenalty = failedModelCount === 1 ? 5 : 0;
-  let adjustedFinalConfidence = Math.max(0, confidence.score - availabilityPenalty - Math.round(divergenceScore * 0.08));
+  let adjustedFinalConfidence = Math.max(
+    0,
+    confidence.score - availabilityPenalty - Math.round(divergenceScore * 0.08) - temporalHallucination.temporalPenalty - temporalHallucination.hallucinationPenalty
+  );
   if ((queryType === "medical" || queryType === "financial") && evidenceAlignmentScore < 65) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 70);
   }
@@ -1019,6 +1041,17 @@ export const verifyResponses = (
     confidence.label
   )}`;
   const claimVerifications = verifyClaims(finalAnswer, responses, evidenceSnippets, outlierModels);
+  const unsupportedClaims = claimVerifications.filter((claim) => claim.status === "insufficient_evidence").length;
+  const contradictedClaims = claimVerifications.filter((claim) => claim.status === "contradicted").length;
+  if (evidenceSnippets.length === 0) {
+    adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 45);
+  }
+  if (unsupportedClaims > 0) {
+    adjustedFinalConfidence = Math.max(0, adjustedFinalConfidence - unsupportedClaims * 6);
+  }
+  if (contradictedClaims > 0) {
+    adjustedFinalConfidence = Math.max(0, adjustedFinalConfidence - contradictedClaims * 10);
+  }
   const judge = buildJudgeAssessment({
     finalConfidenceScore: adjustedFinalConfidence,
     evidenceAlignmentScore,
@@ -1092,7 +1125,25 @@ export const verifyResponses = (
         numbers: [...extractNumbers(item.answer)],
         claims: clusterClaims(extractClaims(item.answer))
       })),
-      uncertaintyDivergence: divergenceScore
+      uncertaintyDivergence: divergenceScore,
+      unifiedVerificationState: {
+        agreementScore,
+        evidenceScore: evidenceAlignmentScore,
+        contradictionScore: contradiction.contradictionScore,
+        uncertaintyScore: divergenceScore,
+        hallucinationPenalty: temporalHallucination.hallucinationPenalty,
+        semanticDivergence: outlierModels.length > 0 ? 100 - agreementScore : 0,
+        sourceCredibility: sourceQualityScore,
+        retrievalSuccess: evidenceSnippets.length > 0,
+        claimSupportLevel: claimVerifications.filter((c) => c.status === "supported").length,
+        finalConfidence: adjustedFinalConfidence,
+        trustClassification: adjustedFinalConfidence >= 80 ? "high" : adjustedFinalConfidence >= 55 ? "medium" : "low",
+        verifiedClaims: claimVerifications.filter((c) => c.status === "supported").length,
+        disputedClaims: claimVerifications.filter((c) => c.status === "contradicted").length,
+        unsupportedClaims: claimVerifications.filter((c) => c.status === "insufficient_evidence").length,
+        temporalPenalty: temporalHallucination.temporalPenalty,
+        contradictionReasons: temporalHallucination.reasons
+      }
     }
   };
 };

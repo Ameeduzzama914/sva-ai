@@ -49,7 +49,7 @@ const selectRetrievalProvider = (): RetrievalProvider => {
     };
   }
 
-  return mock;
+  return new FallbackRetrievalProvider(web, mock);
 };
 
 export const retrievalProvider: RetrievalProvider = selectRetrievalProvider();
