@@ -1,4 +1,5 @@
 import type { EvidenceSnippet } from "./models";
+import { MockRetrievalProvider } from "./retrieval-mock";
 import { WebRetrievalProvider } from "./retrieval-web";
 
 export interface RetrievalResult {
