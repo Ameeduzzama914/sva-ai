@@ -340,6 +340,9 @@ const computeEvidenceMetrics = (
     evidenceStrength = Math.max(62, evidenceStrength);
   }
   const credibility = evidenceSnippets.length > 0 ? Math.max(40, sourceQuality) : 0;
+  const diversityDomains = new Set(evidenceSnippets.map((snippet) => parseDomain(snippet.url)).filter(Boolean)).size;
+  const diversityBonus = Math.min(12, diversityDomains * 3);
+  evidenceStrength = Math.min(100, evidenceStrength + diversityBonus);
   const evidenceCoverage = evidenceSnippets.length === 0 ? 0 : Math.min(100, Math.round((evidenceSnippets.length / 5) * 100));
   return { evidenceStrength, sourceQuality, credibility, evidenceCoverage };
 };
@@ -1031,7 +1034,7 @@ export const verifyResponses = (
     majorityModels
   )}. Outliers: ${listModels(
     outlierModels
-  )}. Evidence alignment: ${evidenceAlignmentScore}/100 and source quality: ${sourceQualityScore}/100. Contradiction score: ${contradiction.contradictionScore}/100 (penalty ${contradiction.contradictionPenalty}).`;
+  )}. Evidence alignment: ${evidenceAlignmentScore}/100 and source quality: ${sourceQualityScore}/100. Contradiction score: ${contradiction.contradictionScore}/100 (penalty ${contradiction.contradictionPenalty}). Why SVA chose this answer: majority models converged on the same core claim set, higher-credibility evidence aligned with those claims, and weaker/contradicted claim variants were down-weighted.`;
 
   const explanation = `I compared ${responses.length} model responses and found ${majorityModels.length} in the majority group: ${listModels(
     majorityModels

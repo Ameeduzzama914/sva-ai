@@ -36,6 +36,8 @@ const statusStyle: Record<string, string> = {
 };
 
 export const SaasDashboard = () => {
+  const sourceReliabilityLabel = (score: number): "Highly Trusted" | "Trusted" | "Moderate" | "Weak Source" =>
+    score >= 90 ? "Highly Trusted" : score >= 75 ? "Trusted" : score >= 55 ? "Moderate" : "Weak Source";
   const [prompt, setPrompt] = useState(STARTER_PROMPT);
   const [mode, setMode] = useState<VerificationMode>("deep");
   const [responses, setResponses] = useState<ModelResponse[]>([]);
@@ -413,12 +415,17 @@ ${evidenceReport}
               ) : evidenceSnippets.length ? (
                 <div className="space-y-3 text-xs">
                   {evidenceSnippets.map((snippet, idx) => (
-                    <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2">
-                      <p className="font-semibold text-slate-200">{snippet.title}</p>
+                    <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-slate-200">{snippet.title}</p>
+                        {snippet.sourceDomain ? <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">{snippet.sourceDomain}</span> : null}
+                      </div>
                       <p className="mt-1 text-slate-400">{snippet.text}</p>
-                      {snippet.sourceDomain ? <p className="mt-1 text-slate-300">{snippet.sourceDomain}</p> : null}
                       <span className="mt-1 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-200">
                         Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%
+                      </span>
+                      <span className="ml-2 mt-1 inline-block rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-200">
+                        {sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}
                       </span>
                       {snippet.url ? (
                         <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
