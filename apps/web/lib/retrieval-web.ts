@@ -1,3 +1,7 @@
+import type { EvidenceSnippet, RetrievalResponse, RetrievedSource, SourceClassification } from "./models";
+import type { RetrievalProvider, RetrievalResult } from "./retrieval";
+
+type SearchItem = RetrievedSource;
 import type { EvidenceSnippet } from "./models";
 import type { RetrievalProvider, RetrievalResult } from "./retrieval";
 
@@ -12,6 +16,25 @@ const parseDomain = (url: string): string => {
 };
 
 class SourceScorer {
+  classify(domain: string): SourceClassification {
+    if (domain.includes(".gov") || domain.includes("who.int") || domain.includes("nih.gov") || domain.includes("cdc.gov")) return "government";
+    if (domain.includes(".edu")) return "educational";
+    if (domain.includes("nature.com") || domain.includes("science.org") || domain.includes("nejm.org") || domain.includes("thelancet.com")) return "scientific";
+    if (domain.includes("reuters.com") || domain.includes("apnews.com") || domain.includes("bbc.com")) return "news";
+    if (domain.includes("wikipedia.org") || domain.includes("britannica.com")) return "encyclopedia";
+    if (domain.includes("reddit.com") || domain.includes("stackexchange.com") || domain.includes("quora.com") || domain.includes("forum")) return "forum";
+    if (domain.includes("blog") || domain.includes("substack")) return "blog";
+    return "unknown";
+  }
+
+  score(domain: string, index: number): { relevanceScore: number; credibilityScore: number } {
+    const trusted = ["who.int", "cdc.gov", "nih.gov", "nasa.gov", "britannica.com", "wikipedia.org", ".gov", ".edu", "nature.com", "science.org", "reuters.com", "apnews.com"];
+    const highlyTrusted = ["who.int", "cdc.gov", "nih.gov", "nasa.gov", "britannica.com", "nature.com", "science.org"];
+    const credibilityScore =
+      highlyTrusted.some((item) => domain.includes(item)) ? 98 :
+      domain.includes("wikipedia.org") || domain.includes("britannica.com") ? 72 :
+      domain.includes("reddit.com") || domain.includes("quora.com") || domain.includes("blog") ? 35 :
+      trusted.some((item) => domain.includes(item)) ? 90 : 65;
   score(domain: string, index: number): { relevanceScore: number; credibilityScore: number } {
     const trusted = ["who.int", "cdc.gov", "nih.gov", "nasa.gov", "britannica.com", "wikipedia.org", ".gov", ".edu", "nature.com", "science.org", "reuters.com", "apnews.com"];
     const highlyTrusted = ["who.int", "cdc.gov", "nih.gov", "nasa.gov", "britannica.com", "nature.com", "science.org"];
@@ -22,12 +45,43 @@ class SourceScorer {
 }
 
 class EvidenceFetcher {
+  async fetch(prompt: string, limit: number): Promise<RetrievalResponse> {
   async fetch(prompt: string, limit: number): Promise<SearchItem[]> {
     const tavilyKey = process.env.TAVILY_API_KEY;
     if (tavilyKey) {
       const response = await fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: tavilyKey, query: prompt, max_results: Math.max(5, limit), search_depth: "advanced" })
+      });
+      if (!response.ok) return { sources: [], mode: "web", error: `tavily_status_${response.status}` };
+      const data = (await response.json()) as { results?: Array<{ title?: string; url?: string; content?: string }> };
+      const sources = (data.results ?? [])
+        .map((r, idx) => {
+          const url = r.url?.trim() ?? "";
+          return { title: r.title?.trim() ?? "", url, snippet: r.content?.trim() ?? "", domain: parseDomain(url), position: idx + 1 };
+        })
+        .filter((r) => r.title && r.url && r.snippet);
+      return { sources, mode: "web" };
+    }
+
+    const serperKey = process.env.WEB_RETRIEVAL_API_KEY;
+    const endpoint = process.env.WEB_RETRIEVAL_ENDPOINT || "https://google.serper.dev/search";
+    if (!serperKey || !endpoint) return { sources: [], mode: "none", error: "web_retrieval_not_configured" };
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+      body: JSON.stringify({ q: prompt, num: Math.max(5, limit) })
+    });
+    if (!response.ok) return { sources: [], mode: "web", error: `serper_status_${response.status}` };
+    const data = (await response.json()) as { organic?: Array<{ title?: string; link?: string; snippet?: string }> };
+    const sources = (data.organic ?? [])
+      .map((r, idx) => {
+        const url = r.link?.trim() ?? "";
+        return { title: r.title?.trim() ?? "", url, snippet: r.snippet?.trim() ?? "", domain: parseDomain(url), position: idx + 1 };
+      })
+      .filter((r) => r.title && r.url && r.snippet);
+    return { sources, mode: "web" };
         body: JSON.stringify({ api_key: tavilyKey, query: prompt, max_results: limit })
       });
       if (!response.ok) return [];
@@ -59,6 +113,14 @@ export class WebRetrievalProvider implements RetrievalProvider {
 
   async retrieve(prompt: string, limit = 5): Promise<RetrievalResult> {
     try {
+      const retrieval = await this.fetcher.fetch(prompt, limit);
+      const snippets: EvidenceSnippet[] = retrieval.sources
+        .filter((item) => item.snippet.length > 40)
+        .slice(0, Math.max(3, limit))
+        .map((item, index) => {
+        const sourceDomain = parseDomain(item.url);
+        const { relevanceScore, credibilityScore } = this.scorer.score(sourceDomain, index);
+        const sourceClassification = this.scorer.classify(sourceDomain);
       const items = await this.fetcher.fetch(prompt, limit);
       const snippets: EvidenceSnippet[] = items.slice(0, limit).map((item, index) => {
         const sourceDomain = parseDomain(item.url);
@@ -69,12 +131,16 @@ export class WebRetrievalProvider implements RetrievalProvider {
           url: item.url,
           sourceDomain,
           sourceType: "web_search",
+          sourceId: `${item.position}-${item.url}`,
+          sourceClassification,
+          trustLabel: credibilityScore >= 85 ? "High Trust" : credibilityScore >= 60 ? "Medium Trust" : "Low Trust",
           sourceId: item.url,
           relevanceScore,
           sourceQualityScore: credibilityScore,
           credibilityScore
         };
       });
+      return { snippets, retrievalModeUsed: retrieval.mode };
       return { snippets, retrievalModeUsed: "web" };
     } catch {
       return { snippets: [], retrievalModeUsed: "web" };
