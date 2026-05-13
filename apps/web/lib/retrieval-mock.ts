@@ -1,48 +1,36 @@
+import type { EvidenceSnippet } from "./models";
 import type { RetrievalProvider, RetrievalResult } from "./retrieval";
 
-const MOCK_SNIPPETS = [
+const MOCK_EVIDENCE: Array<{ title: string; snippet: string; url: string; keywords: string[] }> = [
   {
-    title: "Mount Everest elevation",
-    text: "Mount Everest is widely reported at about 8,849 meters above sea level.",
-    keywords: ["everest", "mountain", "tallest", "elevation", "height"]
+    title: "WHO - Tobacco",
+    snippet: "Tobacco use is a major risk factor for cancer and many chronic diseases.",
+    url: "https://www.who.int/health-topics/tobacco",
+    keywords: ["cigarette", "cancer", "tobacco"]
   },
   {
-    title: "Land-speed context",
-    text: "Production car speed claims vary by test method, road conditions, and official verification.",
-    keywords: ["car", "fastest", "speed", "vehicle", "top speed"]
+    title: "NASA - Apollo 11 Mission Overview",
+    snippet: "Apollo 11 landed humans on the Moon in July 1969.",
+    url: "https://www.nasa.gov/mission/apollo-11/",
+    keywords: ["moon", "1969", "apollo", "landed"]
   }
 ];
 
 export class MockRetrievalProvider implements RetrievalProvider {
-  async retrieve(prompt: string): Promise<RetrievalResult> {
+  async retrieve(prompt: string, limit = 4): Promise<RetrievalResult> {
     const lower = prompt.toLowerCase();
-    const matched = MOCK_SNIPPETS.filter((snippet) => snippet.keywords.some((keyword) => lower.includes(keyword)));
-
-    if (matched.length === 0) {
-      return {
-        snippets: [
-          {
-            title: "No strong evidence found",
-            text: "No relevant mock evidence matched this prompt.",
-            sourceType: "mock_web",
-            sourceId: "no-strong-evidence",
-            relevanceScore: 20
-          }
-        ],
-        retrievalModeUsed: "mock",
-        fallbackToMock: false
-      };
-    }
-
-    return {
-      snippets: matched.map((snippet) => ({
-        title: snippet.title,
-        text: snippet.text,
-        sourceType: "mock_web" as const,
-        relevanceScore: 70
-      })),
-      retrievalModeUsed: "mock",
-      fallbackToMock: false
-    };
+    const matches = MOCK_EVIDENCE.filter((item) => item.keywords.some((k) => lower.includes(k))).slice(0, limit);
+    const snippets: EvidenceSnippet[] = matches.map((item, index) => ({
+      title: item.title,
+      text: item.snippet,
+      sourceType: "web_search",
+      url: item.url,
+      sourceId: item.url,
+      sourceDomain: new URL(item.url).hostname,
+      sourceQualityScore: 80,
+      credibilityScore: 80,
+      relevanceScore: Math.max(55, 95 - index * 10)
+    }));
+    return { snippets, retrievalModeUsed: "mock" };
   }
 }

@@ -70,3 +70,14 @@ export const extractClaims = (text: string): string[] => {
 
   return claims;
 };
+
+export interface ExtractedClaim {
+  claim: string;
+  confidence: number;
+}
+
+export const extractClaimsWithConfidence = (text: string): ExtractedClaim[] =>
+  extractClaims(text).map((claim) => ({
+    claim,
+    confidence: /\d/.test(claim) ? 0.92 : 0.8
+  }));
