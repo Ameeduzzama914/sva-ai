@@ -416,6 +416,11 @@ ${evidenceReport}
                 <div className="space-y-3 text-xs">
                   {evidenceSnippets.map((snippet, idx) => (
                     <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
+                      {(() => {
+                        const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
+                        const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];
+                        return (
+                          <>
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-slate-200">{snippet.title}</p>
                         {snippet.sourceDomain ? <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">{snippet.sourceDomain}</span> : null}
@@ -433,8 +438,11 @@ ${evidenceReport}
                         </a>
                       ) : null}
                       <p className="mt-1 text-slate-500">
-                        Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}%
+                        Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}% · Linked claims: {linkedClaims.length}
                       </p>
+                          </>
+                        );
+                      })()}
                     </article>
                   ))}
                 </div>

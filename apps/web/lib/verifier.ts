@@ -672,7 +672,7 @@ const verifyClaims = (
       })
       .sort((a, b) => b.score - a.score);
 
-    const evidenceScore = Math.round((scoredEvidence[0]?.score ?? 0) * 100);
+    const evidenceScore = Math.round(((scoredEvidence[0]?.score ?? 0) * 0.7 + (scoredEvidence[1]?.score ?? 0) * 0.3) * 100);
     const modelSupportScore = Math.round(
       responses.reduce((sum, response) => sum + similarity(claim, response.answer), 0) / Math.max(1, responses.length) * 100
     );
@@ -693,13 +693,18 @@ const verifyClaims = (
       .map((response) => response.model);
 
     const hasExplicitContradiction = evidenceSnippets.length > 0 && contradictedByModels.length > 0 && modelSupportScore < 45;
+    const hasPartialEvidence = evidenceScore >= 35 || scoredEvidence.some((entry) => entry.score >= 0.28);
+    const hasStrongEvidence = evidenceScore >= 58 || scoredEvidence.some((entry) => entry.score >= 0.45);
+    const mixedEvidence = scoredEvidence.slice(0, 3).some((entry) => /not|no|false|myth|debunk/i.test(entry.snippet.text)) && hasStrongEvidence;
     const status: ClaimVerification["status"] = hasExplicitContradiction
       ? "contradicted"
-      : strongModelConsensus && evidenceSnippets.length > 0 && evidenceScore >= 35
+      : mixedEvidence
+        ? "disputed"
+      : strongModelConsensus && evidenceSnippets.length > 0 && hasStrongEvidence
         ? "supported"
       : evidenceScore >= 70 && modelSupportScore >= 70
         ? "supported"
-        : evidenceScore >= 45 && modelSupportScore >= 55
+        : hasPartialEvidence && modelSupportScore >= 45
           ? "partially_supported"
           : "insufficient_evidence";
 
@@ -708,18 +713,22 @@ const verifyClaims = (
       .slice(0, 3)
       .map((entry) => entry.snippet);
 
-    const contradictionPenaltyScore = hasExplicitContradiction ? 30 : 0;
-    let finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.5 + evidenceScore * 0.4 - contradictionPenaltyScore)));
+    const contradictionPenaltyScore = hasExplicitContradiction ? 30 : status === "disputed" ? 12 : 0;
+    let finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.45 + evidenceScore * 0.4 + (scoredEvidence[0]?.snippet.credibilityScore ?? 0) * 0.15 - contradictionPenaltyScore)));
     if (status === "supported") finalConfidence = Math.max(78, finalConfidence);
     if (status === "partially_supported") finalConfidence = Math.max(55, Math.min(75, finalConfidence));
     if (status === "insufficient_evidence") finalConfidence = Math.min(55, Math.max(25, finalConfidence));
     if (status === "contradicted") finalConfidence = Math.min(35, finalConfidence);
+    if (status === "disputed") finalConfidence = Math.max(40, Math.min(62, finalConfidence));
 
     const explanation = `Agreement ${modelSupportScore}/100, evidence ${evidenceScore}/100, contradiction penalty ${contradictionPenaltyScore}/100. Final claim confidence is ${finalConfidence}/100 (${status.replaceAll(
       "_",
       " "
     )})${contradictedByModels.length > 0 ? `, with contradiction signals from ${listModels(contradictedByModels)}.` : "."}`;
-    console.log("SVA_DEBUG_CLAIM_SCORE", { claim, evidenceScore, modelSupportScore, contradictionPenaltyScore, finalConfidence, status, contradictedByModels });
+    const linkedEvidenceIds = supportingEvidence.map((item) => item.sourceId ?? item.url ?? item.title);
+    const evidenceRelevanceScore = supportingEvidence.length > 0 ? Math.round(supportingEvidence.reduce((sum, item) => sum + item.relevanceScore, 0) / supportingEvidence.length) : 0;
+    const evidenceCredibilityScore = supportingEvidence.length > 0 ? Math.round(supportingEvidence.reduce((sum, item) => sum + (item.credibilityScore ?? item.sourceQualityScore ?? 0), 0) / supportingEvidence.length) : 0;
+    console.log("SVA_DEBUG_CLAIM_SCORE", { claim, evidenceScore, modelSupportScore, contradictionPenaltyScore, finalConfidence, status, contradictedByModels, linkedEvidenceIds, evidenceRelevanceScore, evidenceCredibilityScore, topSimilarities: scoredEvidence.slice(0,3).map((e) => ({ id: e.snippet.sourceId ?? e.snippet.url ?? e.snippet.title, score: Number(e.score.toFixed(3)) })) });
 
     return {
       id: `claim-${index + 1}`,
@@ -728,10 +737,18 @@ const verifyClaims = (
       confidenceScore: finalConfidence,
       claimConfidenceScore: finalConfidence,
       supportingEvidence,
+      linkedEvidenceIds,
+      evidenceRelevanceScore,
+      evidenceCredibilityScore,
       contradictedByModels,
       explanation
     };
   });
+};
+
+const buildFocusedRetrievalQueries = (prompt: string): string[] => {
+  const claimQueries = extractClaims(prompt).slice(0, 3).map((claim) => `${claim.replace(/[.]/g, "")} scientific consensus evidence`);
+  return [prompt, ...claimQueries];
 };
 
 export const buildResponsesForPrompt = async (
@@ -744,8 +761,14 @@ export const buildResponsesForPrompt = async (
   meta: VerificationExecutionMeta;
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
 }> => {
-  const retrievalResult = await retrievalProvider.retrieve(prompt, retrievalLimitByMode(mode));
-  const evidenceSnippets = retrievalResult.snippets.map((snippet) => {
+  const queries = buildFocusedRetrievalQueries(prompt);
+  const retrievalResults = await Promise.all(queries.map((query) => retrievalProvider.retrieve(query, retrievalLimitByMode(mode))));
+  const retrievalModeUsed = retrievalResults.find((r) => r.retrievalModeUsed === "web")?.retrievalModeUsed ?? retrievalResults[0]?.retrievalModeUsed ?? "none";
+  const mergedSnippets = retrievalResults.flatMap((result) => result.snippets).filter((snippet, idx, arr) => {
+    const key = snippet.sourceId ?? snippet.url ?? `${snippet.title}-${snippet.text.slice(0, 40)}`;
+    return arr.findIndex((candidate) => (candidate.sourceId ?? candidate.url ?? `${candidate.title}-${candidate.text.slice(0, 40)}`) === key) === idx;
+  });
+  const evidenceSnippets = mergedSnippets.map((snippet) => {
     const normalizedQuality = Math.max(40, snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet));
     return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
   });
@@ -859,7 +882,7 @@ export const buildResponsesForPrompt = async (
       modelBSource: "openrouter",
       modelCSource: "openrouter",
       providerMessage: "Live AI responses returned for all 3 models.",
-      retrievalModeUsed: retrievalResult.retrievalModeUsed,
+      retrievalModeUsed,
       retrievalSourceCount: evidenceSnippets.length,
     }
   };
@@ -1144,7 +1167,7 @@ export const verifyResponses = (
         finalConfidence: adjustedFinalConfidence,
         trustClassification: adjustedFinalConfidence >= 80 ? "high" : adjustedFinalConfidence >= 55 ? "medium" : "low",
         verifiedClaims: claimVerifications.filter((c) => c.status === "supported").length,
-        disputedClaims: claimVerifications.filter((c) => c.status === "contradicted").length,
+        disputedClaims: claimVerifications.filter((c) => c.status === "disputed").length,
         unsupportedClaims: claimVerifications.filter((c) => c.status === "insufficient_evidence").length,
         temporalPenalty: temporalHallucination.temporalPenalty,
         contradictionReasons: temporalHallucination.reasons
