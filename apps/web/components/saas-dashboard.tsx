@@ -414,6 +414,7 @@ ${evidenceReport}
                 </p>
               ) : evidenceSnippets.length ? (
                 <div className="space-y-3 text-xs">
+                  <p className="text-slate-400">Evidence Used: {evidenceSnippets.length} sources analyzed.</p>
                   {evidenceSnippets.map((snippet, idx) => (
                     <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
                       {(() => {
@@ -438,7 +439,7 @@ ${evidenceReport}
                         </a>
                       ) : null}
                       <p className="mt-1 text-slate-500">
-                        Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}% · Linked claims: {linkedClaims.length}
+                        Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · Linked claims: {linkedClaims.length}
                       </p>
                           </>
                         );
@@ -447,7 +448,9 @@ ${evidenceReport}
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">{isLoading ? "Fetching evidence..." : "Evidence sources will appear after verification."}</p>
+                <p className="text-xs text-slate-400">
+                  {isLoading ? "Searching web... analyzing evidence... comparing sources... generating verdict..." : "Evidence sources will appear after verification."}
+                </p>
               )}
             </Card>
             <Card title="Contradictions">
