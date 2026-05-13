@@ -13,8 +13,9 @@ const parseDomain = (url: string): string => {
 
 class SourceScorer {
   score(domain: string, index: number): { relevanceScore: number; credibilityScore: number } {
-    const trusted = ["wikipedia.org", ".gov", ".edu", "britannica.com", "reuters.com", "apnews.com"];
-    const credibilityScore = trusted.some((item) => domain.includes(item)) ? 90 : 65;
+    const trusted = ["who.int", "cdc.gov", "nih.gov", "nasa.gov", "britannica.com", "wikipedia.org", ".gov", ".edu", "nature.com", "science.org", "reuters.com", "apnews.com"];
+    const highlyTrusted = ["who.int", "cdc.gov", "nih.gov", "nasa.gov", "britannica.com", "nature.com", "science.org"];
+    const credibilityScore = highlyTrusted.some((item) => domain.includes(item)) ? 98 : trusted.some((item) => domain.includes(item)) ? 90 : 65;
     const relevanceScore = Math.max(45, 100 - index * 10);
     return { relevanceScore, credibilityScore };
   }
@@ -74,9 +75,9 @@ export class WebRetrievalProvider implements RetrievalProvider {
           credibilityScore
         };
       });
-      return { snippets, retrievalModeUsed: "web", fallbackToMock: false };
+      return { snippets, retrievalModeUsed: "web" };
     } catch {
-      return { snippets: [], retrievalModeUsed: "web", fallbackToMock: false };
+      return { snippets: [], retrievalModeUsed: "web" };
     }
   }
 }

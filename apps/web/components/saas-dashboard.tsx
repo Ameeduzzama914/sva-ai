@@ -201,7 +201,7 @@ ${evidenceReport}
                 <p className="mt-2 text-xs text-amber-200">Single-provider live mode. Add more providers for stronger cross-model verification.</p>
               ) : null}
               {providerStatus.retrievalProvider === "web" && !providerStatus.webRetrievalConfigured ? (
-                <p className="mt-2 text-xs text-amber-200">Web retrieval not configured, using mock retrieval.</p>
+                <p className="mt-2 text-xs text-amber-200">Web retrieval API key missing. Configure retrieval credentials to enable live evidence.</p>
               ) : null}
             </Card>
           ) : null}

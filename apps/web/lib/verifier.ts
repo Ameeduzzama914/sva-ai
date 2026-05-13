@@ -858,7 +858,6 @@ export const buildResponsesForPrompt = async (
       providerMessage: "Live AI responses returned for all 3 models.",
       retrievalModeUsed: retrievalResult.retrievalModeUsed,
       retrievalSourceCount: evidenceSnippets.length,
-      retrievalFallbackToMock: false
     }
   };
 };
@@ -972,7 +971,10 @@ export const verifyResponses = (
   const outlierResponses = responses.filter((response) => outlierModels.includes(response.model));
   const evidenceMetrics = computeEvidenceMetrics(evidenceSnippets, largestGroup, outlierResponses);
   const sourceQualityScore = evidenceMetrics.sourceQuality;
-  const evidenceAlignmentScore = evidenceMetrics.evidenceStrength;
+  let evidenceAlignmentScore = evidenceMetrics.evidenceStrength;
+  const authoritativeCount = evidenceSnippets.filter((snippet) => (snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0) >= 90).length;
+  if (authoritativeCount >= 2) evidenceAlignmentScore = Math.max(evidenceAlignmentScore, 80);
+  if (authoritativeCount >= 3) evidenceAlignmentScore = Math.max(evidenceAlignmentScore, 88);
   const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
   const divergenceScore = uncertaintyDivergenceScore(responses);

@@ -59,19 +59,7 @@ export async function POST(request: Request) {
     }
 
     const providerFlow = await withTimeout(buildResponsesForPrompt(prompt, mode), 18000);
-    const safeEvidenceSnippets =
-      providerFlow.evidenceSnippets.length > 0
-        ? providerFlow.evidenceSnippets
-        : [
-            {
-              title: "Fallback Evidence Notice",
-              text: "No external evidence could be retrieved. Confidence is based mainly on model agreement, so the result should be treated cautiously.",
-              sourceType: "mock_web" as const,
-              sourceId: "fallback-evidence-notice",
-              relevanceScore: 35,
-              sourceQualityScore: 45
-            }
-          ];
+    const safeEvidenceSnippets = providerFlow.evidenceSnippets;
     const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
     const responseQualityFlag = validResponses.length < 3 ? "low_response_count" : "normal";
 
@@ -100,8 +88,8 @@ export async function POST(request: Request) {
 
 
 
-    if (safeEvidenceSnippets.length === 1 && safeEvidenceSnippets[0].sourceId === "fallback-evidence-notice") {
-      warnings.push("No real external evidence was found.");
+    if (safeEvidenceSnippets.length === 0) {
+      warnings.push("Live web retrieval returned no evidence for this prompt. Try a more specific query.");
     }
 
     let usage: VerificationUsageSummary = {
