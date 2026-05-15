@@ -1,10 +1,9 @@
 import type { EvidenceSnippet } from "./models";
-import { MockRetrievalProvider } from "./retrieval-mock";
 import { WebRetrievalProvider } from "./retrieval-web";
 
 export interface RetrievalResult {
   snippets: EvidenceSnippet[];
-  retrievalModeUsed: "web" | "mock" | "none";
+  retrievalModeUsed: "web" | "none";
 }
 
 export interface RetrievalProvider {
@@ -14,7 +13,6 @@ export interface RetrievalProvider {
 const selectRetrievalProvider = (): RetrievalProvider => {
   const mode = process.env.RETRIEVAL_PROVIDER?.toLowerCase();
   const web = new WebRetrievalProvider();
-  const mock = new MockRetrievalProvider();
 
   if (mode === "none") {
     return {
@@ -23,15 +21,11 @@ const selectRetrievalProvider = (): RetrievalProvider => {
       }
     };
   }
-  if (mode === "mock") {
-    return mock;
-  }
-
   return {
     async retrieve(prompt: string, limit = 5) {
       const webResult = await web.retrieve(prompt, limit);
       if (webResult.snippets.length > 0) return webResult;
-      return mock.retrieve(prompt, limit);
+      return { snippets: [], retrievalModeUsed: "none" };
     }
   };
 };
