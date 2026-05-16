@@ -350,9 +350,9 @@ const computeEvidenceMetrics = (
 const contradictionMetrics = (
   responses: ModelResponse[],
   sharedCore: Set<string>
-): { contradictionScore: number; contradictionPenalty: number; contradictionType: "direct"|"temporal"|"minority"|"consensus_conflict"|"weak" } => {
+): { contradictionScore: number; contradictionPenalty: number; contradictionType: "direct"|"temporal"|"consensus_shift"|"contextual" } => {
   if (responses.length < 2) {
-    return { contradictionScore: 0, contradictionPenalty: 0, contradictionType: "weak" };
+    return { contradictionScore: 0, contradictionPenalty: 0, contradictionType: "contextual" };
   }
 
   let conflictSum = 0;
@@ -377,16 +377,16 @@ const contradictionMetrics = (
 
   const contradictionScore = Math.round((conflictSum / pairs) * 100);
   const contradictionPenaltyScore = Math.round((contradictionScore / 100) * 40);
-  const hasTemporalSignals = responses.some((r) => /\b(19\d{2}|20\d{2})\b/.test(r.answer)) && contradictionScore > 18;
+  const temporalPattern = /\b(19\d{2}|20\d{2}|historically|formerly|modern|current consensus|later evidence|in the \d{4}s)\b/i;
+  const hasTemporalSignals = responses.some((r) => temporalPattern.test(r.answer)) && contradictionScore > 12;
+  const hasConsensusShiftSignals = responses.some((r) => /\b(current|modern|today)\b/i.test(r.answer)) && responses.some((r) => /\b(historically|formerly|past|earlier)\b/i.test(r.answer));
   const contradictionType = contradictionScore >= 45
     ? "direct"
+    : hasConsensusShiftSignals
+      ? "consensus_shift"
     : hasTemporalSignals
       ? "temporal"
-      : contradictionScore >= 30
-        ? "consensus_conflict"
-        : contradictionScore >= 14
-          ? "minority"
-          : "weak";
+      : "contextual";
   return { contradictionScore, contradictionPenalty: contradictionPenaltyScore, contradictionType };
 };
 
@@ -1023,7 +1023,7 @@ export const verifyResponses = (
   if (authoritativeCount >= 2) evidenceAlignmentScore = Math.max(evidenceAlignmentScore, 80);
   if (authoritativeCount >= 3) evidenceAlignmentScore = Math.max(evidenceAlignmentScore, 88);
   const contradiction = strongConsensus
-    ? { contradictionScore: 0, contradictionPenalty: 0, contradictionType: "weak" as const }
+    ? { contradictionScore: 0, contradictionPenalty: 0, contradictionType: "contextual" as const }
     : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
   const divergenceScore = uncertaintyDivergenceScore(responses);
@@ -1127,6 +1127,17 @@ export const verifyResponses = (
     claimVerifications,
     contradictionScore: contradiction.contradictionScore,
     contradictionPenalty: contradiction.contradictionPenalty,
+    contradictionType: contradiction.contradictionType,
+    consensusEvolutionScore:
+      contradiction.contradictionType === "consensus_shift" || contradiction.contradictionType === "temporal"
+        ? Math.max(55, Math.min(95, 100 - contradiction.contradictionScore + Math.round(sourceQualityScore * 0.15)))
+        : Math.max(35, 100 - contradiction.contradictionScore),
+    consensusEvolutionSummary:
+      contradiction.contradictionType === "consensus_shift"
+        ? "Historical medical consensus differed from modern scientific consensus."
+        : contradiction.contradictionType === "temporal"
+          ? "Temporal contradiction detected: claim context changes across historical periods."
+          : "No major historical consensus shift detected.",
     sourceQualityScore,
     trustBreakdown: {
       agreementContribution: Math.round((agreementScore * modeWeights[mode].agreement) / 100),

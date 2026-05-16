@@ -467,6 +467,19 @@ ${evidenceReport}
             </Card>
             <Card title="Contradictions">
               <p className="text-sm text-slate-300">{isDemoMode ? "No live contradiction analysis yet. Connect providers to compare real model outputs." : `Contradiction score: ${verification?.contradictionScore ?? 0}%`}</p>
+              {!isDemoMode && verification ? (
+                <div className="mt-2 space-y-1 text-xs text-slate-300">
+                  <p>Contradiction Type: <span className="text-violet-300">{verification.contradictionType ?? "contextual"}</span></p>
+                  <p>Consensus Evolution Score: <span className="text-emerald-300">{verification.consensusEvolutionScore ?? 0}%</span></p>
+                  <p>{verification.consensusEvolutionSummary}</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {verification.contradictionType === "temporal" ? <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] text-amber-200">Historical Claim</span> : null}
+                    {verification.contradictionType === "consensus_shift" ? <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] text-rose-200">Consensus Shift</span> : null}
+                    {verification.contradictionType === "direct" ? <span className="rounded-full bg-rose-600/25 px-2 py-0.5 text-[11px] text-rose-200">Modern Consensus Conflict</span> : null}
+                    {verification.contradictionType === "contextual" ? <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-[11px] text-slate-200">Contextual Disagreement</span> : null}
+                  </div>
+                </div>
+              ) : null}
               <p className="mt-2 text-xs text-slate-400">
                 {isDemoMode ? "Contradictions will appear only if models disagree." : meta?.providerMessage ?? "Contradictions will appear only if models disagree."}
               </p>
