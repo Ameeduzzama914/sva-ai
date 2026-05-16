@@ -350,9 +350,9 @@ const computeEvidenceMetrics = (
 const contradictionMetrics = (
   responses: ModelResponse[],
   sharedCore: Set<string>
-): { contradictionScore: number; contradictionPenalty: number } => {
+): { contradictionScore: number; contradictionPenalty: number; contradictionType: "direct"|"temporal"|"minority"|"consensus_conflict"|"weak" } => {
   if (responses.length < 2) {
-    return { contradictionScore: 0, contradictionPenalty: 0 };
+    return { contradictionScore: 0, contradictionPenalty: 0, contradictionType: "weak" };
   }
 
   let conflictSum = 0;
@@ -377,7 +377,28 @@ const contradictionMetrics = (
 
   const contradictionScore = Math.round((conflictSum / pairs) * 100);
   const contradictionPenaltyScore = Math.round((contradictionScore / 100) * 40);
-  return { contradictionScore, contradictionPenalty: contradictionPenaltyScore };
+  const hasTemporalSignals = responses.some((r) => /\b(19\d{2}|20\d{2})\b/.test(r.answer)) && contradictionScore > 18;
+  const contradictionType = contradictionScore >= 45
+    ? "direct"
+    : hasTemporalSignals
+      ? "temporal"
+      : contradictionScore >= 30
+        ? "consensus_conflict"
+        : contradictionScore >= 14
+          ? "minority"
+          : "weak";
+  return { contradictionScore, contradictionPenalty: contradictionPenaltyScore, contradictionType };
+};
+
+const consensusAlignmentScore = (evidenceSnippets: EvidenceSnippet[], agreementScore: number): number => {
+  if (evidenceSnippets.length === 0) return Math.max(20, Math.round(agreementScore * 0.4));
+  const authoritative = evidenceSnippets.filter((s) => (s.credibilityScore ?? s.sourceQualityScore ?? 0) >= 90).length;
+  const diversity = new Set(evidenceSnippets.map((s) => s.sourceDomain).filter(Boolean)).size;
+  const weightedEvidence = Math.round(
+    evidenceSnippets.reduce((sum, s) => sum + ((s.relevanceScore * 0.45) + ((s.credibilityScore ?? s.sourceQualityScore ?? 0) * 0.55)), 0) /
+      Math.max(1, evidenceSnippets.length)
+  );
+  return Math.max(0, Math.min(100, Math.round(weightedEvidence * 0.6 + agreementScore * 0.25 + authoritative * 4 + diversity * 2)));
 };
 
 const scoreConfidence = (
@@ -1001,7 +1022,9 @@ export const verifyResponses = (
   const authoritativeCount = evidenceSnippets.filter((snippet) => (snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0) >= 90).length;
   if (authoritativeCount >= 2) evidenceAlignmentScore = Math.max(evidenceAlignmentScore, 80);
   if (authoritativeCount >= 3) evidenceAlignmentScore = Math.max(evidenceAlignmentScore, 88);
-  const contradiction = strongConsensus ? { contradictionScore: 0, contradictionPenalty: 0 } : contradictionMetrics(responses, sharedCore);
+  const contradiction = strongConsensus
+    ? { contradictionScore: 0, contradictionPenalty: 0, contradictionType: "weak" as const }
+    : contradictionMetrics(responses, sharedCore);
   const consistency = responseConsistencyAdjustment(responses);
   const divergenceScore = uncertaintyDivergenceScore(responses);
   const temporalHallucination = temporalAndHallucinationPenalty(responses, evidenceSnippets);
@@ -1025,10 +1048,12 @@ export const verifyResponses = (
   );
   console.log("SVA_DEBUG_TRUST", { agreementScore, evidenceAlignmentScore, sourceQualityScore, contradictionScore: contradiction.contradictionScore, contradictionPenalty: contradiction.contradictionPenalty, mode });
   const availabilityPenalty = failedModelCount === 1 ? 5 : 0;
+  const consensusScore = consensusAlignmentScore(evidenceSnippets, agreementScore);
   let adjustedFinalConfidence = Math.max(
     0,
     confidence.score - availabilityPenalty - Math.round(divergenceScore * 0.08) - temporalHallucination.temporalPenalty - temporalHallucination.hallucinationPenalty
   );
+  adjustedFinalConfidence = Math.round(Math.max(adjustedFinalConfidence, adjustedFinalConfidence * 0.75 + consensusScore * 0.25));
   if ((queryType === "medical" || queryType === "financial") && evidenceAlignmentScore < 65) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 70);
   }
@@ -1057,7 +1082,7 @@ export const verifyResponses = (
     majorityModels
   )}. Outliers: ${listModels(
     outlierModels
-  )}. Evidence alignment: ${evidenceAlignmentScore}/100 and source quality: ${sourceQualityScore}/100. Contradiction score: ${contradiction.contradictionScore}/100 (penalty ${contradiction.contradictionPenalty}). Why SVA chose this answer: majority models converged on the same core claim set, higher-credibility evidence aligned with those claims, and weaker/contradicted claim variants were down-weighted.`;
+  )}. Evidence alignment: ${evidenceAlignmentScore}/100 and source quality: ${sourceQualityScore}/100. Consensus alignment: ${consensusScore}/100. Contradiction score: ${contradiction.contradictionScore}/100 (penalty ${contradiction.contradictionPenalty}, type ${contradiction.contradictionType}). Why SVA chose this answer: majority models converged on the same core claim set, higher-credibility evidence aligned with those claims, and weaker/contradicted claim variants were down-weighted.`;
 
   const explanation = `I compared ${responses.length} model responses and found ${majorityModels.length} in the majority group: ${listModels(
     majorityModels

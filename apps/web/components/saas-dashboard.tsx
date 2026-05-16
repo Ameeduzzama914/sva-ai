@@ -106,6 +106,8 @@ export const SaasDashboard = () => {
 
   const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
   const trustScore = verification?.finalConfidenceScore ?? 0;
+  const evidenceDiversity = new Set(evidenceSnippets.map((snippet) => snippet.sourceDomain).filter(Boolean)).size;
+  const minorityOppositionLevel = Math.min(100, Math.round((verification?.contradictionScore ?? 0) * 0.85));
   const trustLabel =
     verification?.confidenceLabel === "Very High"
       ? "Highly Reliable"
@@ -316,6 +318,8 @@ ${evidenceReport}
                     { label: "Model Agreement", value: verification?.agreementScore ?? 0 },
                     { label: "Evidence Strength", value: verification?.evidenceAlignmentScore ?? 0 },
                     { label: "Source Quality", value: verification?.sourceQualityScore ?? 0 },
+                    { label: "Evidence Diversity", value: evidenceDiversity > 0 ? Math.min(100, evidenceDiversity * 20) : 0 },
+                    { label: "Minority Opposition", value: minorityOppositionLevel },
                     { label: "Consistency", value: Math.max(0, 100 - (verification?.contradictionScore ?? 0)) }
                   ].map((item) => (
                     <div key={item.label}>
