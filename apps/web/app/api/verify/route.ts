@@ -89,7 +89,11 @@ export async function POST(request: Request) {
 
 
     if (safeEvidenceSnippets.length === 0) {
-      warnings.push("Live web retrieval returned no evidence for this prompt. Try a more specific query.");
+      warnings.push(
+        providerFlow.meta.retrievalModeUsed === "none"
+          ? "Evidence retrieval unavailable. SVA used model consensus only."
+          : "Live web retrieval returned no evidence for this prompt. Try a more specific query."
+      );
     }
 
     let usage: VerificationUsageSummary = {

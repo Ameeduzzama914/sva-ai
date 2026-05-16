@@ -414,40 +414,41 @@ ${evidenceReport}
                 </p>
               ) : evidenceSnippets.length ? (
                 <div className="space-y-3 text-xs">
-                  {evidenceSnippets.map((snippet, idx) => (
-                    <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
-                      {(() => {
-                        const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
-                        const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];
-                        return (
-                          <>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-slate-200">{snippet.title}</p>
-                        {snippet.sourceDomain ? <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">{snippet.sourceDomain}</span> : null}
-                      </div>
-                      <p className="mt-1 text-slate-400">{snippet.text}</p>
-                      <span className="mt-1 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-200">
-                        Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%
-                      </span>
-                      <span className="ml-2 mt-1 inline-block rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-200">
-                        {sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}
-                      </span>
-                      {snippet.url ? (
-                        <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
-                          {snippet.url}
-                        </a>
-                      ) : null}
-                      <p className="mt-1 text-slate-500">
-                        Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}% · Linked claims: {linkedClaims.length}
-                      </p>
-                          </>
-                        );
-                      })()}
-                    </article>
-                  ))}
+                  <p className="text-slate-400">
+                    Sources retrieved: {evidenceSnippets.length} · Snippets extracted: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
+                  </p>
+                  {evidenceSnippets.map((snippet, idx) => {
+                    const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
+                    const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];
+                    return (
+                      <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-200">{snippet.title}</p>
+                          {snippet.sourceDomain ? <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">{snippet.sourceDomain}</span> : null}
+                        </div>
+                        <p className="mt-1 text-slate-400">{snippet.text}</p>
+                        <span className="mt-1 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-200">
+                          Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%
+                        </span>
+                        <span className="ml-2 mt-1 inline-block rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-200">
+                          {sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}
+                        </span>
+                        {snippet.url ? (
+                          <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
+                            {snippet.url}
+                          </a>
+                        ) : null}
+                        <p className="mt-1 text-slate-500">
+                          Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · Linked claims: {linkedClaims.length}
+                        </p>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">{isLoading ? "Fetching evidence..." : "Evidence sources will appear after verification."}</p>
+                <p className="text-xs text-slate-400">
+                  {isLoading ? "Searching web... analyzing evidence... comparing sources... generating verdict..." : "Evidence retrieval unavailable. SVA used model consensus only."}
+                </p>
               )}
             </Card>
             <Card title="Contradictions">

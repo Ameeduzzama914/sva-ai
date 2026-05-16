@@ -21,13 +21,7 @@ const selectRetrievalProvider = (): RetrievalProvider => {
       }
     };
   }
-  return {
-    async retrieve(prompt: string, limit = 5) {
-      const webResult = await web.retrieve(prompt, limit);
-      if (webResult.snippets.length > 0) return webResult;
-      return { snippets: [], retrievalModeUsed: "none" };
-    }
-  };
+  return web;
 };
 
 export const retrievalProvider: RetrievalProvider = selectRetrievalProvider();
