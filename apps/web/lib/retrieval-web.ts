@@ -56,7 +56,7 @@ class EvidenceFetcher {
       return { sources, mode: "web" };
     }
 
-    const serperKey = process.env.WEB_RETRIEVAL_API_KEY;
+    const serperKey = process.env.SERPER_API_KEY || process.env.WEB_RETRIEVAL_API_KEY;
     const endpoint = process.env.WEB_RETRIEVAL_ENDPOINT || "https://google.serper.dev/search";
     if (!serperKey || !endpoint) return { sources: [], mode: "none", error: "web_retrieval_not_configured" };
     const response = await fetch(endpoint, {
@@ -72,7 +72,7 @@ class EvidenceFetcher {
         return { title: r.title?.trim() ?? "", url, snippet: r.snippet?.trim() ?? "", domain: parseDomain(url), position: idx + 1 };
       })
       .filter((r) => r.title && r.url && r.snippet);
-    return { sources, mode: "web" };
+    return { sources, mode: "web", error: sources.length === 0 ? "web_retrieval_empty_results" : undefined };
   }
 }
 
@@ -104,7 +104,7 @@ export class WebRetrievalProvider implements RetrievalProvider {
           credibilityScore
         };
       });
-      return { snippets, retrievalModeUsed: retrieval.mode };
+      return { snippets, retrievalModeUsed: retrieval.mode === "none" ? "none" : "web" };
     } catch {
       return { snippets: [], retrievalModeUsed: "web" };
     }
