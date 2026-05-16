@@ -433,13 +433,23 @@ ${evidenceReport}
                         <span className="ml-2 mt-1 inline-block rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-200">
                           {sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}
                         </span>
+                        {snippet.trustTier ? (
+                          <span className="ml-2 mt-1 inline-block rounded-full bg-indigo-500/20 px-2 py-0.5 text-[11px] text-indigo-200">
+                            {snippet.trustTier}
+                          </span>
+                        ) : null}
+                        {snippet.sourceCategory ? (
+                          <span className="ml-2 mt-1 inline-block rounded-full bg-cyan-500/20 px-2 py-0.5 text-[11px] text-cyan-200">
+                            {snippet.sourceCategory}
+                          </span>
+                        ) : null}
                         {snippet.url ? (
                           <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
                             {snippet.url}
                           </a>
                         ) : null}
                         <p className="mt-1 text-slate-500">
-                          Relevance: {snippet.relevanceScore}% · Source quality: {snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · Linked claims: {linkedClaims.length}
+                          Relevance: {snippet.relevanceScore}% · Credibility: {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · Linked claims: {linkedClaims.length}
                         </p>
                       </article>
                     );
