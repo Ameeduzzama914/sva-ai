@@ -27,6 +27,7 @@ const modelBadgeLabel: Record<ModelName, string> = {
 };
 
 const statusStyle: Record<string, string> = {
+  strongly_supported: "bg-emerald-400/25 text-emerald-200 border-emerald-400/40",
   supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
   partially_supported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
   contradicted: "bg-rose-500/20 text-rose-300 border-rose-500/40",
