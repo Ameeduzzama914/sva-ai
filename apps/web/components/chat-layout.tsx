@@ -12,6 +12,7 @@ import {
   type VerifyApiResponse,
   type ModelName
 } from "../lib/models";
+import { Badge } from "./ui/badge";
 
 type HistoryItem = {
   prompt: string;
@@ -354,9 +355,7 @@ export const ChatLayout = () => {
                   <div className="row-space">
                     <div className="flex items-center gap-2">
                       <strong>{modelName}</strong>
-                      <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-200">
-                        {modelBadgeLabel[modelName]}
-                      </span>
+                      <Badge variant="violet" className="text-[10px]">{modelBadgeLabel[modelName]}</Badge>
                     </div>
                     <span className={isSuccess ? (isMajority ? "badge majority" : isOutlier ? "badge outlier" : "badge pending") : "badge outlier"}>
                       {!hasRunVerification ? "Pending" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable"}

@@ -5,6 +5,7 @@ import { AppSidebar } from "./app-sidebar";
 import { DashboardHeader } from "./dashboard-header";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
 import {
   STARTER_PROMPT,
   type EvidenceSnippet,
@@ -242,7 +243,7 @@ ${evidenceReport}
           ) : null}
 
           <Card title="Multi-AI Responses" subtitle="Cross-model agreement overview with expandable answers">
-            <div className="grid gap-4 lg:grid-cols-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {visibleModels.map((model) => {
                 const response = responses.find((item) => item.model === model);
                 const source = sourceMap.get(model);
@@ -250,29 +251,21 @@ ${evidenceReport}
                 const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
                 const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
                 const badgeText = !hasRunVerification ? "Ready" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable";
-                const badgeClass = !hasRunVerification
-                  ? "bg-slate-500/20 text-slate-200"
-                  : !isSuccess
-                    ? "bg-rose-500/20 text-rose-300"
-                  : isOutlier
-                    ? "bg-amber-500/20 text-amber-300"
-                    : "bg-emerald-500/20 text-emerald-300";
+                const badgeVariant = !hasRunVerification ? "neutral" : !isSuccess ? "danger" : isOutlier ? "warning" : "success";
 
                 return (
                   <article
                     key={model}
-                    className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-[0_0_28px_rgba(139,92,246,0.18)] ${
+                    className={`rounded-xl border p-3 sm:p-4 transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-[0_0_28px_rgba(139,92,246,0.18)] ${
                       !isDemoMode && isMajority ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-700 bg-slate-950/60"
                     }`}
                   >
                     <div className="mb-2 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-slate-100">{model}</p>
-                        <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-200">
-                          {modelBadgeLabel[model]}
-                        </span>
+                        <Badge variant="violet" className="text-[10px]">{modelBadgeLabel[model]}</Badge>
                       </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>{badgeText}</span>
+                      <Badge variant={badgeVariant}>{badgeText}</Badge>
                     </div>
                     <p className="text-xs leading-5 text-slate-300">
                       {isLoading
@@ -371,7 +364,7 @@ ${evidenceReport}
             </p>
             <div className="mt-3 flex items-center gap-3 text-sm">
               <span className="font-semibold text-violet-300">Confidence: {isDemoMode ? "--" : verification?.finalConfidenceScore ?? 0}%</span>
-              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">{isDemoMode ? "Live Preview" : verification?.confidenceLabel ?? "Pending"}</span>
+              <Badge variant="success" className="text-xs">{isDemoMode ? "Live Preview" : verification?.confidenceLabel ?? "Pending"}</Badge>
             </div>
             <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-300">
               <li>{isDemoMode ? "Key takeaways will appear after live provider responses are available." : verification?.reasoning ?? "Key takeaways appear after verification completes."}</li>
@@ -414,7 +407,7 @@ ${evidenceReport}
                         <tr key={row.id} className="border-b border-slate-900/80 align-top">
                           <td className="px-2 py-3 text-slate-200">{row.claim}</td>
                           <td className="px-2 py-3">
-                            <span className={`rounded-full border px-2 py-0.5 text-xs ${statusStyle[row.status] ?? statusStyle.uncertain}`}>{row.status}</span>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${statusStyle[row.status] ?? statusStyle.uncertain}`}>{row.status}</span>
                           </td>
                           <td className="px-2 py-3 text-slate-300">{row.confidenceScore}%</td>
                           <td className="px-2 py-3 text-slate-300">{row.supportingEvidence.length}</td>
@@ -443,24 +436,16 @@ ${evidenceReport}
                       <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-slate-200">{snippet.title}</p>
-                          {snippet.sourceDomain ? <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">{snippet.sourceDomain}</span> : null}
+                          {snippet.sourceDomain ? <Badge>{snippet.sourceDomain}</Badge> : null}
                         </div>
                         <p className="mt-1 text-slate-400">{snippet.text}</p>
-                        <span className="mt-1 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-200">
-                          Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%
-                        </span>
-                        <span className="ml-2 mt-1 inline-block rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-200">
-                          {sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}
-                        </span>
+                        <Badge variant="success" className="mt-1">Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%</Badge>
+                        <Badge variant="violet" className="ml-2 mt-1">{sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}</Badge>
                         {snippet.trustTier ? (
-                          <span className="ml-2 mt-1 inline-block rounded-full bg-indigo-500/20 px-2 py-0.5 text-[11px] text-indigo-200">
-                            {snippet.trustTier}
-                          </span>
+                          <Badge variant="indigo" className="ml-2 mt-1">{snippet.trustTier}</Badge>
                         ) : null}
                         {snippet.sourceCategory ? (
-                          <span className="ml-2 mt-1 inline-block rounded-full bg-cyan-500/20 px-2 py-0.5 text-[11px] text-cyan-200">
-                            {snippet.sourceCategory}
-                          </span>
+                          <Badge variant="cyan" className="ml-2 mt-1">{snippet.sourceCategory}</Badge>
                         ) : null}
                         {snippet.url ? (
                           <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
@@ -488,10 +473,10 @@ ${evidenceReport}
                   <p>Consensus Evolution Score: <span className="text-emerald-300">{verification.consensusEvolutionScore ?? 0}%</span></p>
                   <p>{verification.consensusEvolutionSummary}</p>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {verification.contradictionType === "temporal" ? <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] text-amber-200">Historical Claim</span> : null}
-                    {verification.contradictionType === "consensus_shift" ? <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] text-rose-200">Consensus Shift</span> : null}
-                    {verification.contradictionType === "direct" ? <span className="rounded-full bg-rose-600/25 px-2 py-0.5 text-[11px] text-rose-200">Modern Consensus Conflict</span> : null}
-                    {verification.contradictionType === "contextual" ? <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-[11px] text-slate-200">Contextual Disagreement</span> : null}
+                    {verification.contradictionType === "temporal" ? <Badge variant="warning">Historical Claim</Badge> : null}
+                    {verification.contradictionType === "consensus_shift" ? <Badge variant="danger">Consensus Shift</Badge> : null}
+                    {verification.contradictionType === "direct" ? <Badge variant="danger">Modern Consensus Conflict</Badge> : null}
+                    {verification.contradictionType === "contextual" ? <Badge>Contextual Disagreement</Badge> : null}
                   </div>
                 </div>
               ) : null}
