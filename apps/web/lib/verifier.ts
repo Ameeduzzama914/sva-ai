@@ -1016,7 +1016,20 @@ export const verifyResponses = (
     return sum + getModelWeight(modelSource);
   }, 0);
   const baselineAgreement = totalWeight === 0 ? 0 : Math.round((majorityWeight / totalWeight) * 100);
-  const agreementScore = (strongConsensus || (majorityModels.length === responses.length && responses.length >= 2)) ? Math.max(95, baselineAgreement) : baselineAgreement;
+  const semanticAgreementScore = Math.round(
+    responses.reduce((sum, r) => sum + similarity(r.answer, pickRepresentativeAnswer(largestGroup)), 0) / Math.max(1, responses.length) * 100
+  );
+  const conclusionAlignmentScore = Math.round(
+    responses.filter((r) => hasCoreAgreement(r.answer, sharedCore)).length / Math.max(1, responses.length) * 100
+  );
+  const reasoningDivergenceScore = Math.max(0, 100 - semanticAgreementScore);
+  const uncertaintyAlignmentScore = Math.max(0, 100 - Math.round(uncertaintyDivergenceScore(responses) * 1.2));
+  const agreementScore = Math.round(
+    baselineAgreement * 0.35 +
+    semanticAgreementScore * 0.3 +
+    conclusionAlignmentScore * 0.2 +
+    uncertaintyAlignmentScore * 0.15
+  );
 
   const outlierResponses = responses.filter((response) => outlierModels.includes(response.model));
   const evidenceMetrics = computeEvidenceMetrics(evidenceSnippets, largestGroup, outlierResponses);

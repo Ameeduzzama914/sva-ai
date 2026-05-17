@@ -29,6 +29,8 @@ const modelBadgeLabel: Record<ModelName, string> = {
 const statusStyle: Record<string, string> = {
   strongly_supported: "bg-emerald-400/25 text-emerald-200 border-emerald-400/40",
   supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  weak_support: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  weakly_supported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
   partially_supported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
   contradicted: "bg-rose-500/20 text-rose-300 border-rose-500/40",
   unsupported: "bg-rose-500/20 text-rose-300 border-rose-500/40",
@@ -108,7 +110,11 @@ export const SaasDashboard = () => {
   const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
   const trustScore = verification?.finalConfidenceScore ?? 0;
   const evidenceDiversity = new Set(evidenceSnippets.map((snippet) => snippet.sourceDomain).filter(Boolean)).size;
-  const minorityOppositionLevel = Math.min(100, Math.round((verification?.contradictionScore ?? 0) * 0.85));
+  const disputedClaimCount = verification?.claimVerifications.filter((claim) => ["disputed", "contradicted", "weak_support", "weakly_supported"].includes(claim.status)).length ?? 0;
+  const minorityOppositionLevel = Math.min(100, Math.max(
+    Math.round((verification?.contradictionScore ?? 0) * 0.85),
+    disputedClaimCount > 0 ? 20 + disputedClaimCount * 10 : 0
+  ));
   const trustLabel =
     verification?.confidenceLabel === "Very High"
       ? "Highly Reliable"
