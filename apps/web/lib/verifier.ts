@@ -1112,6 +1112,8 @@ export const verifyResponses = (
   const claimVerifications = verifyClaims(finalAnswer, responses, evidenceSnippets, outlierModels);
   const unsupportedClaims = claimVerifications.filter((claim) => claim.status === "insufficient_evidence").length;
   const contradictedClaims = claimVerifications.filter((claim) => claim.status === "contradicted").length;
+  const disputedClaims = claimVerifications.filter((claim) => claim.status === "disputed").length;
+  const derivedContradictionFloor = Math.min(95, contradictedClaims * 22 + disputedClaims * 10);
   if (evidenceSnippets.length === 0) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 45);
   }
@@ -1121,10 +1123,11 @@ export const verifyResponses = (
   if (contradictedClaims > 0) {
     adjustedFinalConfidence = Math.max(0, adjustedFinalConfidence - contradictedClaims * 10);
   }
+  const normalizedContradictionScore = Math.max(contradiction.contradictionScore, derivedContradictionFloor);
   const judge = buildJudgeAssessment({
     finalConfidenceScore: adjustedFinalConfidence,
     evidenceAlignmentScore,
-    contradictionScore: contradiction.contradictionScore,
+    contradictionScore: normalizedContradictionScore,
     claimVerifications,
     majorityModels,
     outlierModels

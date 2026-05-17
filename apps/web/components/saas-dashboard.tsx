@@ -460,7 +460,7 @@ ${evidenceReport}
                           </a>
                         ) : null}
                         <p className="mt-1 text-slate-500">
-                          Relevance: {snippet.relevanceScore}% · Credibility: {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · Linked claims: {linkedClaims.length}
+                          Relevance: {snippet.relevanceScore}% · Credibility: {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · {linkedClaims.length > 0 ? `Linked claims: ${linkedClaims.length}` : "Background source"}
                         </p>
                       </article>
                     );
