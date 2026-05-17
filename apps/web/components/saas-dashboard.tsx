@@ -119,16 +119,24 @@ export const SaasDashboard = () => {
     verification?.confidenceLabel === "Very High"
       ? "Highly Reliable"
       : verification?.confidenceLabel === "High"
-        ? "Highly Reliable"
+        ? "Strong Reliability"
       : verification?.confidenceLabel === "Medium"
-        ? "Moderately Reliable"
+        ? "Moderate Reliability"
         : verification?.confidenceLabel === "Low"
-          ? "Low Reliability"
+          ? "Weak Reliability"
           : "Awaiting verification";
 
   const handleCopyAnswer = async () => {
     if (!verification?.finalAnswer) return;
     await navigator.clipboard.writeText(verification.finalAnswer);
+  };
+
+  const getShortAnswer = (answer?: string): string => {
+    if (!answer || typeof answer !== "string") {
+      return "Model unavailable";
+    }
+    const words = answer.split(/\s+/);
+    return words.length > 45 ? `${words.slice(0, 45).join(" ")}…` : answer;
   };
 
   const handleExportReport = () => {
@@ -274,7 +282,7 @@ ${evidenceReport}
                           : isDemoMode
                             ? "Model unavailable. Check backend model configuration."
                             : isSuccess
-                              ? response?.answer ?? "Waiting"
+                              ? getShortAnswer(response?.answer)
                               : "Model unavailable"}
                     </p>
                     <p className="mt-3 text-[11px] text-slate-400">Source: SVA Model Layer</p>

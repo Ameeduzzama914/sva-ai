@@ -16,10 +16,11 @@ class SourceScorer {
     if (domain.includes(".gov") || domain.includes("who.int") || domain.includes("nih.gov") || domain.includes("cdc.gov")) return "government";
     if (domain.includes(".edu")) return "educational";
     if (domain.includes("nature.com") || domain.includes("science.org") || domain.includes("nejm.org") || domain.includes("thelancet.com")) return "scientific";
-    if (domain.includes("reuters.com") || domain.includes("apnews.com") || domain.includes("bbc.com")) return "news";
+    if (domain.includes("reuters.com") || domain.includes("apnews.com") || domain.includes("bbc.com") || domain.includes("nytimes.com")) return "news";
     if (domain.includes("wikipedia.org") || domain.includes("britannica.com")) return "encyclopedia";
-    if (domain.includes("reddit.com") || domain.includes("stackexchange.com") || domain.includes("quora.com") || domain.includes("forum")) return "forum";
-    if (domain.includes("blog") || domain.includes("substack")) return "blog";
+    if (domain.includes("facebook.com") || domain.includes("reddit.com") || domain.includes("stackexchange.com") || domain.includes("quora.com") || domain.includes("forum")) return "forum";
+    if (domain.includes("youtube.com")) return "blog";
+    if (domain.includes("blog") || domain.includes("substack") || domain.includes("medium.com")) return "blog";
     return "unknown";
   }
 
@@ -49,8 +50,9 @@ class SourceScorer {
     const credibilityScore =
       highlyTrusted.some((item) => domain.includes(item)) ? 98 :
       domain.includes("wikipedia.org") || domain.includes("britannica.com") ? 72 :
-      domain.includes("facebook.com") || domain.includes("reddit.com") || domain.includes("quora.com") ? 20 :
-      domain.includes("blog") || domain.includes("medium.com") ? 35 :
+      domain.includes("facebook.com") || domain.includes("reddit.com") || domain.includes("quora.com") ? 18 :
+      domain.includes("youtube.com") ? 45 :
+      domain.includes("blog") || domain.includes("medium.com") ? 32 :
       trusted.some((item) => domain.includes(item)) ? 90 : 65;
     const relevanceScore = Math.max(45, 100 - index * 10);
     return { relevanceScore, credibilityScore };
