@@ -5,7 +5,7 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100">
       <MarketingNav />
-      <main className="mx-auto max-w-4xl space-y-4 px-4 py-10 sm:px-6">
+      <main className="mx-auto max-w-4xl space-y-4 px-4 pb-10 pt-24 sm:px-6">
         <h1 className="text-3xl font-semibold">Privacy Policy (MVP)</h1>
         <Card title="What SVA stores"><p className="text-sm text-slate-300">SVA stores account email, selected plan, usage counters, verification queries, and generated results to support core product functionality.</p></Card>
         <Card title="Verification queries and results"><p className="text-sm text-slate-300">Your prompts and verification outputs may be persisted for history and product-quality improvements during MVP launch testing.</p></Card>

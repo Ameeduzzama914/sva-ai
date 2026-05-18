@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MarketingNav } from "../../components/marketing-nav";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { getPlanIntent, setSession, signupUser } from "../../lib/client-auth";
+import { getPlanIntent, getSession, setSession, signupUser } from "../../lib/client-auth";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -14,9 +14,15 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    if (getSession()) {
+      router.replace("/app");
+    }
+  }, [router]);
+
 
   return <div className="min-h-screen bg-[#070b14] text-slate-100"><MarketingNav />
-    <main className="grid min-h-[calc(100vh-64px)] place-items-center px-4 py-10"><Card className="w-full max-w-md border-violet-500/30 bg-slate-950/80" title="Create your SVA account" subtitle="Start with the free plan and upgrade anytime.">
+    <main className="grid min-h-[calc(100vh-64px)] place-items-center px-4 pb-10 pt-24"><Card className="w-full max-w-md border-violet-500/30 bg-slate-950/80" title="Create your SVA account" subtitle="Start with the free plan and upgrade anytime.">
       <form className="space-y-3" onSubmit={(e)=>{e.preventDefault(); if(!email){setMessage("Email is required."); return;} if(password.length < 6){setMessage("Password must be at least 6 characters."); return;} if(password!==confirmPassword){setMessage("Password confirmation does not match."); return;} const r=signupUser(email,password); if(!r.ok){setMessage(r.message??'Signup failed'); return;} const plan=getPlanIntent()??'free'; setSession({email,plan,createdAt:new Date().toISOString()}); setMessage(plan==='free'?null:'Billing coming soon — your plan selection has been saved.'); setTimeout(()=>router.push('/app'),300);}}>
         <input className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" placeholder="Email" type="email" value={email} onChange={(e)=>setEmail(e.target.value)} required />
         <input className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" placeholder="Password" type="password" value={password} onChange={(e)=>setPassword(e.target.value)} required />

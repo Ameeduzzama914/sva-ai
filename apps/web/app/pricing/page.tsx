@@ -39,7 +39,7 @@ export default function PricingPage() {
   };
 
   return <div className="min-h-screen bg-[#070b14] text-slate-100"><MarketingNav />
-    <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6"><div className="mb-10 text-center"><h1 className="text-4xl font-semibold">Pricing for every trust workflow</h1></div>
+    <main className="mx-auto max-w-6xl px-4 pb-14 pt-20 sm:px-6"><div className="mb-10 text-center"><h1 className="text-4xl font-semibold">Pricing for every trust workflow</h1></div>
       <div className="grid gap-5 md:grid-cols-3">{plans.map((plan)=><Card key={plan.name} className={plan.featured?"border-violet-500/60 shadow-[0_0_40px_rgba(139,92,246,0.2)]":""}><div className="space-y-3">{plan.featured?<Badge variant="violet">Most popular</Badge>:null}{plan.billingComingSoon ? <Badge variant="warning">Billing coming soon</Badge> : null}<h2 className="text-2xl font-semibold">{plan.name}</h2><p className="text-xl text-violet-200">{plan.price}</p><p className="text-sm text-slate-300">{plan.description}</p><ul className="space-y-1 text-sm text-slate-300">{plan.features.map((feature)=><li key={feature}>• {feature}</li>)}</ul><Button variant={plan.featured?"primary":"secondary"} className="mt-2 w-full" onClick={()=>choosePlan(plan)}>{plan.ctaLabel}</Button></div></Card>)}</div>
       <section className="mt-10"><Card title="Usage tracker (Free plan MVP)"><p className="text-sm text-slate-300">Free plan includes 10 verifications/day. Usage updates as you run verification.</p></Card></section>
       {msg ? <p className="mt-4 text-sm text-amber-300">{msg}</p> : null}
