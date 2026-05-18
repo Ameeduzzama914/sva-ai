@@ -180,6 +180,7 @@ export const ChatLayout = () => {
     return [
       { label: "Agreement", value: verification.agreementScore },
       { label: "Evidence", value: verification.evidenceAlignmentScore },
+      { label: "Claim Coverage", value: verification.claimCoverageScore ?? 0 },
       { label: "Contradiction", value: Math.max(0, 100 - (verification.contradictionScore ?? 0)) },
       { label: "Final Confidence", value: verification.finalConfidenceScore }
     ];

@@ -446,6 +446,7 @@ const contradictionSeverityLabel = (score: number): "low" | "medium" | "high" =>
   }
   return "low";
 };
+const clampInt = (v: number): number => Math.max(0, Math.min(100, Math.round(Number.isFinite(v) ? v : 0)));
 
 const mapConfidenceLabel = (score: number): VerificationResult["confidenceLabel"] =>
   score >= 90 ? "Very High" : score >= 75 ? "High" : score >= 40 ? "Medium" : "Low";
@@ -606,6 +607,7 @@ const buildFinalAnswerWithDisagreement = (
 
 const buildJudgeAssessment = (input: {
   finalConfidenceScore: number;
+  claimCoverageScore: number;
   evidenceAlignmentScore: number;
   contradictionScore: number;
   claimVerifications: ClaimVerification[];
@@ -630,6 +632,9 @@ const buildJudgeAssessment = (input: {
   }
   if (weakClaims > supportedClaims) {
     riskFlags.push("More claims are weak/uncertain than strongly supported.");
+  }
+  if (input.claimCoverageScore < 41) {
+    riskFlags.push("Claim coverage is low; more meaningful verifiable claims are needed for stronger trust.");
   }
   if (input.finalConfidenceScore > 80 && (input.evidenceAlignmentScore < 55 || input.contradictionScore > 35)) {
     riskFlags.push("Confidence may be overstated relative to evidence/contradiction signals.");
@@ -1208,7 +1213,7 @@ export const verifyResponses = (
     contradiction.contradictionScore
   );
   const consensusLabel = consensusBand(agreementScore, contradiction.contradictionScore);
-  const topEvidence = evidenceSnippets.slice(0, 3).map((s) => `- ${s.title} (${s.sourceDomain ?? "source"}, credibility ${s.credibilityScore ?? s.sourceQualityScore ?? sourceQualityForSnippet(s)}%)`).join("\n");
+  const topEvidence = evidenceSnippets.slice(0, 3).map((s) => `- ${s.title} (${s.sourceDomain ?? "source"}, credibility ${clampInt(s.credibilityScore ?? s.sourceQualityScore ?? sourceQualityForSnippet(s))}%)`).join("\n");
   const contradictionSeverityText = contradictionSeverityLabel(contradiction.contradictionScore);
   const contradictionExplanation = contradiction.contradictionScore <= 15 ? "No major contradiction detected" : contradiction.contradictionType === "contextual" ? "Contextual disagreement detected" : contradiction.contradictionType === "direct" ? "High-quality sources directly disagree" : "Evidence is mixed across sources";
   const evidenceQualityNote = sourceQualityScore < 55 ? "Evidence quality is mixed." : "Evidence quality is strong overall.";
@@ -1227,12 +1232,13 @@ export const verifyResponses = (
           : "Low",
     contradictionImpact: Math.max(0, 100 - contradiction.contradictionScore)
   };
+  const tier1Count = evidenceSnippets.filter((s) => /nih|pmc|pubmed|who\.int|cdc\.gov|\.gov|nature|sciencedirect/i.test(`${s.url ?? ""} ${s.title}`)).length;
   const sections: NonNullable<VerificationResult["sections"]> = {
-    coreConclusion: coreAnswer,
-    evidenceSummary: topEvidence || "- Limited external evidence returned.",
-    risksAndCaveats: `${evidenceQualityNote} Confidence reduced by contradiction severity (${contradictionSeverityText}).`,
-    contradictions: `${contradictionExplanation}. Outlier models: ${listModels(outlierModels)}.`,
-    scientificConsensusSummary: `${consensusLabel} with majority ${listModels(majorityModels)}.`
+    coreConclusion: `${coreAnswer} Confidence is ${mapConfidenceLabel(adjustedFinalConfidence)} (${adjustedFinalConfidence}/100). Evidence direction is ${evidenceAlignmentScore >= 60 ? "supportive" : evidenceAlignmentScore >= 40 ? "mixed" : "weak"}, with ${contradictionSeverityText} contradiction pressure.`,
+    evidenceSummary: `${topEvidence || "- Limited external evidence returned."}\nTier-1 scientific/official sources: ${tier1Count}/${evidenceSnippets.length}. Source quality: ${sourceQualityScore}/100.`,
+    risksAndCaveats: `${evidenceQualityNote} Population-level variability and unresolved study gaps may limit generalizability. Areas with sparse or lower-authority evidence reduce certainty.`,
+    contradictions: `${contradictionExplanation}. Outlier models: ${listModels(outlierModels)}. Disagreement type: ${contradiction.contradictionType}.`,
+    scientificConsensusSummary: `${consensusLabel} with majority ${listModels(majorityModels)}${outlierModels.length ? ` and outliers ${listModels(outlierModels)}` : ""}.`
   };
   const finalAnswer = `Quick Verdict: ${unified.verdict}\n${adjustedFinalConfidence}/100 Confidence\n${sections.coreConclusion}\n\nScientific Consensus: ${sections.scientificConsensusSummary}\n\nEvidence Summary:\n${sections.evidenceSummary}\n\nImportant Caveats: ${sections.risksAndCaveats}\n\nContradictions / Debates: ${sections.contradictions}\n\nFinal Confidence Assessment: ${adjustedFinalConfidence}/100 — ${unified.reliability} Reliability.`;
 
@@ -1277,6 +1283,8 @@ export const verifyResponses = (
   }
   const normalizedContradictionScore = Math.max(contradiction.contradictionScore, derivedContradictionFloor);
   const claimSupportPercent = claimVerifications.length === 0 ? 0 : Math.round((claimVerifications.filter((c)=>["supported","strongly_supported","mostly_supported"].includes(c.status)).length / claimVerifications.length) * 100);
+  const extractedMeaningfulClaims = new Set(responses.flatMap((r) => extractClaims(r.answer).map((c) => c.toLowerCase().trim()))).size;
+  const claimCoverageScore = extractedMeaningfulClaims === 0 ? 0 : clampInt((claimVerifications.length / extractedMeaningfulClaims) * 100);
   const unifiedScored = unifiedTrustScore({
     agreement: agreementScore,
     evidence: evidenceAlignmentScore,
@@ -1308,6 +1316,7 @@ export const verifyResponses = (
 
   const judge = buildJudgeAssessment({
     finalConfidenceScore: adjustedFinalConfidence,
+    claimCoverageScore,
     evidenceAlignmentScore,
     contradictionScore: normalizedContradictionScore,
     claimVerifications,
@@ -1322,7 +1331,8 @@ export const verifyResponses = (
     verificationBadges: [
       consensusLabel === "High Consensus" ? "Strong Consensus" : consensusLabel === "Moderate Consensus" ? "Moderate Consensus" : "Scientific Debate",
       evidenceAlignmentScore < 45 ? "Weak Evidence" : "Evidence-backed",
-      contradictionSeverityText === "high" ? "High Contradiction" : contradictionSeverityText === "medium" ? "Moderate Contradiction" : "Low Contradiction"
+      contradictionSeverityText === "high" ? "High Contradiction" : contradictionSeverityText === "medium" ? "Moderate Contradiction" : "Low Contradiction",
+      claimCoverageScore >= 71 ? "Strong Claim Coverage" : claimCoverageScore >= 41 ? "Moderate Claim Coverage" : "Low Claim Coverage"
     ],
     sections,
     contradictionSeverity: contradictionSeverityText,
