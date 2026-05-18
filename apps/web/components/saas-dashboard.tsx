@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { DashboardHeader } from "./dashboard-header";
 import { Button } from "./ui/button";
@@ -19,6 +20,7 @@ import {
   type VerifyApiResponse
 } from "../lib/models";
 import type { ProviderStatus } from "../lib/server/provider-status";
+import { getSession, getUsage, incrementUsage, logout } from "../lib/client-auth";
 
 const visibleModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
 const modelBadgeLabel: Record<ModelName, string> = {
@@ -40,6 +42,7 @@ const statusStyle: Record<string, string> = {
 };
 
 export const SaasDashboard = () => {
+  const router = useRouter();
   const sourceReliabilityLabel = (score: number): "Highly Trusted" | "Trusted" | "Moderate" | "Weak Source" =>
     score >= 90 ? "Highly Trusted" : score >= 75 ? "Trusted" : score >= 55 ? "Moderate" : "Weak Source";
   const [prompt, setPrompt] = useState(STARTER_PROMPT);
@@ -54,7 +57,10 @@ export const SaasDashboard = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [runtimeProviderStatus, setRuntimeProviderStatus] = useState<Record<ModelName, RuntimeProviderStatus> | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
+  const session = getSession();
+  const usage = session ? getUsage(session.email) : null;
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
   const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
   const liveSuccessCount = runtimeProviderStatus ? Object.values(runtimeProviderStatus).filter((item) => item.liveSuccess).length : null;
@@ -62,6 +68,7 @@ export const SaasDashboard = () => {
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (session && usage && usage.remaining <= 0) { setErrorMessage("Daily free quota reached. Upgrade plan to continue."); return; }
     setIsLoading(true);
     setErrorMessage(null);
     setWarnings([]);
@@ -91,6 +98,7 @@ export const SaasDashboard = () => {
       setMeta(data.meta);
       setRuntimeProviderStatus(data.providerRuntimeStatus);
       setWarnings(data.warnings ?? []);
+      if (session) incrementUsage(session.email);
     } catch {
       setErrorMessage("Verification request failed. Please try again.");
     } finally {
@@ -177,6 +185,7 @@ ${evidenceReport}
         <AppSidebar contradictionCount={contradictionCount} />
 
         <main className="flex-1 space-y-4 p-5">
+          <Card><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="text-slate-300">{session ? `${session.email} · ${session.plan.toUpperCase()} plan` : "Guest session"}</p><div className="flex items-center gap-2">{usage ? <Badge variant={usage.remaining===0?"danger":"success"}>Remaining today: {usage.remaining}/{usage.limit}</Badge> : null}<Button variant="ghost" type="button" onClick={()=>{logout(); router.push("/login");}}>Logout</Button></div></div></Card>
           <DashboardHeader
             prompt={prompt}
             mode={mode}
@@ -282,7 +291,7 @@ ${evidenceReport}
                   </article>
                 );
               })}
-            </div>
+            </div>{actionMessage ? <p className="mt-2 text-xs text-violet-300">{actionMessage}</p> : null}
           </Card>
 
           <div className="grid gap-5 xl:grid-cols-[1.45fr_0.95fr]">
@@ -376,9 +385,7 @@ ${evidenceReport}
               <Button type="button" onClick={handleExportReport} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
                 Export
               </Button>
-              <Button variant="ghost" type="button" disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>
-                Share
-              </Button>
+              <Button variant="ghost" type="button" onClick={async ()=>{ if(!verification){setActionMessage("Share coming soon."); return;} await navigator.clipboard.writeText(`SVA verified: ${verification.finalAnswer}`); setActionMessage("Share text copied to clipboard."); }} disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>Share</Button>
             </div>
           </Card>
 
