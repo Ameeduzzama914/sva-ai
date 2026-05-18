@@ -573,7 +573,7 @@ const buildJudgeAssessment = (input: {
   const riskFlags: string[] = [];
   const supportedClaims = input.claimVerifications.filter((claim) => claim.status === "supported").length;
   const weakClaims = input.claimVerifications.filter((claim) =>
-    ["weak_support", "contradicted", "insufficient_evidence", "unsupported", "uncertain", "partially_supported", "disputed"].includes(claim.status)
+    ["contradicted", "insufficient_evidence", "partially_supported", "disputed"].includes(claim.status)
   ).length;
 
   if (input.evidenceAlignmentScore < 45) {
@@ -753,7 +753,7 @@ const verifyClaims = (
     const hasPartialEvidence = evidenceScore >= 35 || scoredEvidence.some((entry) => entry.score >= 0.28);
     const hasStrongEvidence = evidenceScore >= 58 || scoredEvidence.some((entry) => entry.score >= 0.45);
     const independentCorroboration = supportingEvidence.length >= 2 && evidenceCredibilityScore >= 75;
-    const mixedEvidence = scoredEvidence.slice(0, 3).some((entry) => /not|no|false|myth|debunk/i.test(entry.snippet.text)) && hasStrongEvidence;
+    const mixedEvidence = scoredEvidence.slice(0, 4).some((entry) => /not|no|false|myth|debunk|unclear|limited|insufficient/i.test(entry.snippet.text)) && hasStrongEvidence;
     const status: ClaimVerification["status"] = hasExplicitContradiction
       ? "contradicted"
       : mixedEvidence
@@ -765,17 +765,17 @@ const verifyClaims = (
       : evidenceScore >= 60 && modelSupportScore >= 60
         ? "supported"
         : hasPartialEvidence && modelSupportScore >= 45 && evidenceCredibilityScore >= 55
-          ? "weak_support"
+          ? "partially_supported"
           : "insufficient_evidence";
 
     const contradictionPenaltyScore = hasExplicitContradiction ? (evidenceCredibilityScore >= 80 ? 34 : 24) : status === "disputed" ? 10 : 0;
     let finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.35 + evidenceScore * 0.35 + evidenceCredibilityScore * 0.2 + evidenceRelevanceScore * 0.1 - contradictionPenaltyScore)));
-    if (status === "strongly_supported") finalConfidence = Math.max(84, finalConfidence);
-    if (status === "supported") finalConfidence = Math.max(70, Math.min(89, finalConfidence));
-    if (status === "weak_support") finalConfidence = Math.max(50, Math.min(69, finalConfidence));
-    if (status === "insufficient_evidence") finalConfidence = Math.min(55, Math.max(25, finalConfidence));
-    if (status === "contradicted") finalConfidence = Math.min(35, finalConfidence);
-    if (status === "disputed") finalConfidence = Math.max(40, Math.min(62, finalConfidence));
+    if (status === "strongly_supported") finalConfidence = Math.max(88, Math.min(97, finalConfidence));
+    if (status === "supported") finalConfidence = Math.max(76, Math.min(91, finalConfidence));
+    if (status === "partially_supported") finalConfidence = Math.max(58, Math.min(74, finalConfidence));
+    if (status === "insufficient_evidence") finalConfidence = Math.min(59, Math.max(38, finalConfidence));
+    if (status === "contradicted") finalConfidence = Math.min(34, finalConfidence);
+    if (status === "disputed") finalConfidence = Math.max(45, Math.min(67, finalConfidence));
 
     const explanation = `Agreement ${modelSupportScore}/100, evidence ${evidenceScore}/100, contradiction penalty ${contradictionPenaltyScore}/100. Final claim confidence is ${finalConfidence}/100 (${status.replaceAll(
       "_",
@@ -1125,7 +1125,8 @@ export const verifyResponses = (
   );
   const consensusLabel = consensusBand(agreementScore, contradiction.contradictionScore);
   const topEvidence = evidenceSnippets.slice(0, 3).map((s) => `- ${s.title} (${s.sourceDomain ?? "source"}, credibility ${s.credibilityScore ?? s.sourceQualityScore ?? sourceQualityForSnippet(s)}%)`).join("\n");
-  const contradictionExplanation = contradiction.contradictionScore === 0 ? "No major contradiction detected" : contradiction.contradictionType === "contextual" ? "Contextual disagreement detected" : contradiction.contradictionType === "direct" ? "High-quality sources directly disagree" : "Evidence is mixed across sources";
+  const contradictionSeverity = contradiction.contradictionScore <= 15 ? "none" : contradiction.contradictionScore <= 40 ? "low" : contradiction.contradictionScore <= 70 ? "moderate" : "severe";
+  const contradictionExplanation = contradictionSeverity === "none" ? "No major contradiction detected" : contradiction.contradictionType === "contextual" ? "Contextual disagreement detected" : contradiction.contradictionType === "direct" ? "High-quality sources directly disagree" : "Evidence is mixed across sources";
   const evidenceQualityNote = sourceQualityScore < 55 ? "Evidence quality is mixed." : "Evidence quality is strong overall.";
   const unified = {
     verdict:
@@ -1165,7 +1166,7 @@ export const verifyResponses = (
     if (claim.status === "insufficient_evidence" && credibleLinks >= 2) {
       return {...claim, status:"partially_supported", confidenceScore: Math.max(55, claim.confidenceScore), explanation: "Multiple credible sources support parts of this claim, but context or precision limits full support."};
     }
-    if ((claim.status === "weak_support" || claim.status === "weakly_supported") && credibleLinks >= 2) {
+    if ((claim.status === "partially_supported") && credibleLinks >= 2) {
       return {...claim, status:"supported", confidenceScore: Math.max(68, claim.confidenceScore)};
     }
     return claim;
@@ -1184,7 +1185,7 @@ export const verifyResponses = (
     adjustedFinalConfidence = Math.max(0, adjustedFinalConfidence - contradictedClaims * 10);
   }
   const normalizedContradictionScore = Math.max(contradiction.contradictionScore, derivedContradictionFloor);
-  const claimSupportPercent = claimVerifications.length === 0 ? 0 : Math.round((claimVerifications.filter((c)=>["supported","strongly_supported","partially_supported","weak_support"].includes(c.status)).length / claimVerifications.length) * 100);
+  const claimSupportPercent = claimVerifications.length === 0 ? 0 : Math.round((claimVerifications.filter((c)=>["supported","strongly_supported","partially_supported"].includes(c.status)).length / claimVerifications.length) * 100);
   const unifiedScored = unifiedTrustScore({
     agreement: agreementScore,
     evidence: evidenceAlignmentScore,

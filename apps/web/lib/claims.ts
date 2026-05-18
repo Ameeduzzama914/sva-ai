@@ -1,3 +1,16 @@
+
+const META_PATTERNS = [
+  /quick verdict/i,
+  /final confidence/i,
+  /confidence assessment/i,
+  /consensus summary/i,
+  /why sva chose/i,
+  /important caveats/i,
+  /evidence summary/i,
+  /^verdict[:\s]/i,
+  /^confidence[:\s]/i
+];
+
 const VAGUE_PATTERNS = [
   /^hi\b/i,
   /^hello\b/i,
@@ -29,7 +42,7 @@ const isLikelyFactualClaim = (claim: string): boolean => {
     return false;
   }
 
-  if (VAGUE_PATTERNS.some((pattern) => pattern.test(claim))) {
+  if (VAGUE_PATTERNS.some((pattern) => pattern.test(claim)) || META_PATTERNS.some((pattern)=>pattern.test(claim))) {
     return false;
   }
 
@@ -75,7 +88,7 @@ export const extractClaims = (text: string): string[] => {
     claims.push(claim.endsWith(".") ? claim : `${claim}.`);
   });
 
-  return claims;
+  return claims.slice(0, 8);
 };
 
 export interface ExtractedClaim {
