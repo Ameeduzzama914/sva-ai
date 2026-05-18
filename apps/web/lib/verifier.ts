@@ -59,8 +59,9 @@ const FILLER_PHRASES = [
 const POSITIVE_CUES = ["is", "are", "highest", "best", "top", "yes", "true", "accepted"];
 const NEGATIVE_CUES = ["is not", "isn't", "are not", "no", "false", "never", "cannot", "can't"];
 const AGREEMENT_THRESHOLD = 0.56;
-const HIGH_TRUST_DOMAINS = ["wikipedia.org", "britannica.com", "nasa.gov", "who.int", "cdc.gov", ".gov", ".edu"];
-const MEDIUM_TRUST_HINTS = ["news", "blog", "magazine", "opinion", "guide"];
+const HIGHEST_TRUST_HINTS = [".gov", ".edu", "pubmed", "nih.gov", "who.int", "cdc.gov", "nasa.gov", "nature.com", "science.org", "university", "official documentation", "docs."];
+const MEDIUM_TRUST_HINTS = ["reuters", "apnews", "bbc", "nytimes", "economist", "education", "research institute"];
+const LOW_TRUST_HINTS = ["blog", "forum", "reddit", "social", "x.com", "twitter", "opinion", "medium.com", "quora"];
 
 const modeWeights: Record<VerificationMode, { agreement: number; evidence: number; source: number }> = {
   fast: { agreement: 40, evidence: 30, source: 20 },
@@ -265,19 +266,19 @@ const sourceQualityForSnippet = (snippet: EvidenceSnippet): number => {
   const domain = parseDomain(snippet.url);
   const text = `${snippet.title} ${snippet.text}`.toLowerCase();
 
-  if (HIGH_TRUST_DOMAINS.some((item) => domain.includes(item) || text.includes(item.replace(".", "")))) {
-    return domain.includes(".gov") || domain.includes(".edu") ? 95 : 88;
+  if (HIGHEST_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
+    return domain.includes('.gov') || domain.includes('.edu') || domain.includes('pubmed') ? 96 : 90;
   }
-
   if (MEDIUM_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return 56;
+    return 72;
   }
-
+  if (LOW_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
+    return 38;
+  }
   if (snippet.text.length < 50 || /click|buy now|sponsored|top 10|best ever/.test(text)) {
-    return 32;
+    return 30;
   }
-
-  return 58;
+  return 62;
 };
 
 const computeSourceQualityScore = (evidenceSnippets: EvidenceSnippet[]): number => {
@@ -401,6 +402,13 @@ const consensusAlignmentScore = (evidenceSnippets: EvidenceSnippet[], agreementS
   return Math.max(0, Math.min(100, Math.round(weightedEvidence * 0.6 + agreementScore * 0.25 + authoritative * 4 + diversity * 2)));
 };
 
+const consensusBand = (agreementScore: number, contradictionScore: number): "High Consensus" | "Moderate Consensus" | "Split Consensus" | "Contradictory Results" => {
+  if (contradictionScore >= 60) return "Contradictory Results";
+  if (agreementScore >= 78 && contradictionScore <= 25) return "High Consensus";
+  if (agreementScore >= 58) return "Moderate Consensus";
+  return "Split Consensus";
+};
+
 const scoreConfidence = (
   mode: VerificationMode,
   agreementScore: number,
@@ -424,7 +432,7 @@ const scoreConfidence = (
       consistencyAdjustment
   );
   const contradictionPenaltyAdjusted = mode === "deep" ? Math.round(contradictionPenaltyValue * 1.1) : contradictionPenaltyValue;
-  let finalScore = Math.max(0, Math.min(100, rawScore - contradictionPenaltyAdjusted));
+  let finalScore = Math.max(0, Math.min(100, rawScore - Math.round(contradictionPenaltyAdjusted * 0.75)));
 
   if (guardrails.allFallback) {
     finalScore = Math.min(finalScore, 60);
@@ -436,7 +444,7 @@ const scoreConfidence = (
     finalScore = Math.min(finalScore, 70);
   }
   if (guardrails.noEvidence) {
-    finalScore = Math.min(finalScore, 55);
+    finalScore = Math.min(finalScore, 62);
   }
 
   if (finalScore >= 85) {
@@ -1073,10 +1081,10 @@ export const verifyResponses = (
   if ((queryType === "medical" || queryType === "financial") && evidenceAlignmentScore < 65) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 70);
   }
-  if (contradiction.contradictionScore > 35 || agreementScore < 55) {
+  if (contradiction.contradictionScore > 50 || agreementScore < 45) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 58);
   }
-  if (evidenceAlignmentScore < 40 && sourceQualityScore < 45) {
+  if (evidenceAlignmentScore < 35 && sourceQualityScore < 40) {
     adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 52);
   }
   if (strongConsensus) {
@@ -1087,12 +1095,15 @@ export const verifyResponses = (
   if (responses.length === 2 && majorityModels.length === 2 && failedModelCount === 1) {
     adjustedFinalConfidence = Math.max(65, adjustedFinalConfidence);
   }
-  const finalAnswer = buildFinalAnswerWithDisagreement(
+  const coreAnswer = buildFinalAnswerWithDisagreement(
     pickRepresentativeAnswer(largestGroup),
     majorityModels,
     outlierModels,
     contradiction.contradictionScore
   );
+  const consensusLabel = consensusBand(agreementScore, contradiction.contradictionScore);
+  const topEvidence = evidenceSnippets.slice(0, 3).map((s) => `- ${s.title} (${s.sourceDomain ?? "source"}, credibility ${s.credibilityScore ?? s.sourceQualityScore ?? sourceQualityForSnippet(s)}%)`).join("\n");
+  const finalAnswer = `Quick Verdict: ${adjustedFinalConfidence >= 80 ? "Likely Reliable" : adjustedFinalConfidence >= 65 ? "Moderately Reliable" : adjustedFinalConfidence >= 40 ? "Uncertain" : "Low Reliability"}\n\nCore Conclusion: ${coreAnswer}\n\nSupporting Evidence:\n${topEvidence || "- Limited external evidence returned."}\n\nRisks / Caveats: Contradiction score ${contradiction.contradictionScore}/100, source quality ${sourceQualityScore}/100.\n\nContradictions Detected: ${contradiction.contradictionType} (${contradiction.contradictionScore}/100).\n\nConsensus Summary: ${consensusLabel} — majority ${listModels(majorityModels)}${outlierModels.length ? `; outliers ${listModels(outlierModels)}` : ""}.\n\nFinal Confidence: ${adjustedFinalConfidence}/100 (${adjustedFinalConfidence >= 85 ? "Very High" : adjustedFinalConfidence >= 70 ? "High" : adjustedFinalConfidence >= 40 ? "Medium" : "Low"}).`;
 
   const reasoning = `All models were compared semantically. ${largestGroup.length}/${responses.length} responses clustered into the majority (agreement ${agreementScore}/100). Majority models: ${listModels(
     majorityModels
