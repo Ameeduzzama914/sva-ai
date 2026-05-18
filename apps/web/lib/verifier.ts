@@ -447,6 +447,9 @@ const contradictionSeverityLabel = (score: number): "low" | "medium" | "high" =>
   return "low";
 };
 
+const mapConfidenceLabel = (score: number): VerificationResult["confidenceLabel"] =>
+  score >= 90 ? "Very High" : score >= 75 ? "High" : score >= 60 ? "Medium" : "Low";
+
 
 const clamp = (v:number,min=0,max=100)=>Math.max(min,Math.min(max,v));
 
@@ -1224,7 +1227,14 @@ export const verifyResponses = (
           : "Low",
     contradictionImpact: Math.max(0, 100 - contradiction.contradictionScore)
   };
-  const finalAnswer = `Quick Verdict: ${unified.verdict}\n${adjustedFinalConfidence}/100 Confidence\n${coreAnswer}\n\nScientific Consensus: ${coreAnswer}\n\nEvidence Summary:\n${topEvidence || "- Limited external evidence returned."}\n\nImportant Caveats: ${evidenceQualityNote} Contradiction score ${contradiction.contradictionScore}/100, source quality ${sourceQualityScore}/100.\n\nContradictions / Debates: ${contradictionExplanation} (${contradiction.contradictionScore}/100).\n\nConsensus Summary: ${consensusLabel} — majority ${listModels(majorityModels)}${outlierModels.length ? `; outliers ${listModels(outlierModels)}` : ""}.\n\nFinal Confidence Assessment: ${adjustedFinalConfidence}/100 — ${unified.reliability} Reliability.`;
+  const sections: NonNullable<VerificationResult["sections"]> = {
+    coreConclusion: coreAnswer,
+    evidenceSummary: topEvidence || "- Limited external evidence returned.",
+    risksAndCaveats: `${evidenceQualityNote} Confidence reduced by contradiction severity (${contradictionSeverityText}).`,
+    contradictions: `${contradictionExplanation}. Outlier models: ${listModels(outlierModels)}.`,
+    scientificConsensusSummary: `${consensusLabel} with majority ${listModels(majorityModels)}.`
+  };
+  const finalAnswer = `Quick Verdict: ${unified.verdict}\n${adjustedFinalConfidence}/100 Confidence\n${sections.coreConclusion}\n\nScientific Consensus: ${sections.scientificConsensusSummary}\n\nEvidence Summary:\n${sections.evidenceSummary}\n\nImportant Caveats: ${sections.risksAndCaveats}\n\nContradictions / Debates: ${sections.contradictions}\n\nFinal Confidence Assessment: ${adjustedFinalConfidence}/100 — ${unified.reliability} Reliability.`;
 
   const reasoning = `All models were compared semantically. ${largestGroup.length}/${responses.length} responses clustered into the majority (agreement ${agreementScore}/100). Majority models: ${listModels(
     majorityModels
@@ -1305,7 +1315,14 @@ export const verifyResponses = (
     agreementScore,
     evidenceAlignmentScore,
     finalConfidenceScore: adjustedFinalConfidence,
-    confidenceLabel: adjustedFinalConfidence >= 85 ? "Very High" : adjustedFinalConfidence >= 70 ? "High" : adjustedFinalConfidence >= 40 ? "Medium" : "Low",
+    verificationBadges: [
+      consensusLabel === "High Consensus" ? "Strong Consensus" : consensusLabel === "Moderate Consensus" ? "Moderate Consensus" : "Scientific Debate",
+      evidenceAlignmentScore < 45 ? "Weak Evidence" : "Evidence-backed",
+      contradictionSeverityText === "high" ? "High Contradiction" : contradictionSeverityText === "medium" ? "Moderate Contradiction" : "Low Contradiction"
+    ],
+    sections,
+    contradictionSeverity: contradictionSeverityText,
+    confidenceLabel: mapConfidenceLabel(adjustedFinalConfidence),
     finalAnswer,
     majorityModels,
     outlierModels,
