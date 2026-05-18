@@ -20,9 +20,9 @@ type Plan = {
 };
 
 const plans: Plan[] = [
-  { key: "free", name: "Free", price: "₹0", description: "Best for getting started", features: ["10 verifications/day", "3 AI comparisons", "Basic evidence retrieval"], ctaLabel: "Choose Free", featured: false, billingComingSoon: false },
-  { key: "pro", name: "Pro", price: "₹499/month", description: "For deeper verification workflows", features: ["50 verifications/day", "Deeper verification", "Saved history", "Enhanced trust analysis"], ctaLabel: "Choose Pro", featured: true, billingComingSoon: true },
-  { key: "plus", name: "Plus", price: "₹999/month", description: "For advanced users and teams", features: ["Unlimited verifications", "Advanced AI models", "Priority verification", "Export/share tools", "Advanced evidence engine"], ctaLabel: "Choose Plus", featured: false, billingComingSoon: true }
+  { key: "free", name: "Free", price: "₹0", description: "Best for getting started", features: ["10 verifications/day", "3 AI comparisons", "Basic evidence retrieval"], ctaLabel: "Start free", featured: false, billingComingSoon: false },
+  { key: "pro", name: "Pro", price: "₹499/month", description: "For deeper verification workflows", features: ["50 verifications/day", "Deeper verification", "Saved history", "Enhanced trust analysis"], ctaLabel: "Join waitlist", featured: true, billingComingSoon: true },
+  { key: "plus", name: "Plus", price: "₹999/month", description: "For advanced users and teams", features: ["Unlimited verifications", "Advanced AI models", "Priority verification", "Export/share tools", "Advanced evidence engine"], ctaLabel: "Join waitlist", featured: false, billingComingSoon: true }
 ];
 
 export default function PricingPage() {
@@ -30,7 +30,7 @@ export default function PricingPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const choosePlan = (plan: Plan) => {
     if (plan.billingComingSoon) {
-      setMsg("Billing integration coming soon. Join waitlist or continue with Free.");
+      setMsg("Billing is coming soon. Continue with Free for now.");
       return;
     }
     setPlanIntent(plan.key);

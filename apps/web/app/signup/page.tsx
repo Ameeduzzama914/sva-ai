@@ -22,6 +22,7 @@ export default function SignUpPage() {
         <input className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" placeholder="Password" type="password" value={password} onChange={(e)=>setPassword(e.target.value)} required />
         <input className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" placeholder="Confirm password" type="password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} required />
         <Button variant="primary" className="w-full" type="submit">Create account</Button>
+        <Button className="w-full" type="button" onClick={()=>{setSession({email:"demo.google@sva.app",plan:"free",createdAt:new Date().toISOString()}); router.push("/app");}}>Continue with Google (Demo)</Button>
       </form>{message ? <p className="mt-3 text-xs text-amber-300">{message}</p> : null}
       <p className="mt-4 text-xs text-slate-400">Already have an account? <Link href="/login" className="text-violet-300">Log in</Link></p>
     </Card></main></div>;

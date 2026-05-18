@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getSession } from "../lib/client-auth";
+import { useRouter } from "next/navigation";
+import { getSession, logout } from "../lib/client-auth";
 
 const actionClass = "inline-flex items-center justify-center rounded-xl border px-3 py-1.5 text-sm font-medium transition";
 
 export const MarketingNav = () => {
+  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   useEffect(() => setIsLoggedIn(Boolean(getSession())), []);
 
@@ -20,8 +22,17 @@ export const MarketingNav = () => {
           <Link href="/privacy" className="hover:text-white">Privacy</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/login" className={`${actionClass} border-slate-700 text-slate-200 hover:bg-slate-800`}>Log in</Link>
-          <Link href="/signup" className={`${actionClass} border-violet-400 bg-violet-500 text-white hover:bg-violet-400`}>Start free</Link>
+          {isLoggedIn ? (
+            <>
+              <Link href="/app" className={`${actionClass} border-violet-400 bg-violet-500 text-white hover:bg-violet-400`}>Dashboard</Link>
+              <button type="button" className={`${actionClass} border-slate-700 text-slate-200 hover:bg-slate-800`} onClick={() => { logout(); setIsLoggedIn(false); router.push("/login"); }}>Logout</button>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className={`${actionClass} border-slate-700 text-slate-200 hover:bg-slate-800`}>Log in</Link>
+              <Link href="/signup" className={`${actionClass} border-violet-400 bg-violet-500 text-white hover:bg-violet-400`}>Start free</Link>
+            </>
+          )}
         </div>
       </div>
     </header>

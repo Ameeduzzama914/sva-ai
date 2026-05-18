@@ -14,6 +14,8 @@ export default function PrivacyPage() {
         <Card title="Sensitive data warning"><p className="text-sm text-slate-300">Do not submit sensitive personal, medical, legal, or financial information. SVA responses are assistive and must be independently validated.</p></Card>
         <Card title="Billing status"><p className="text-sm text-slate-300">Paid billing flows are not fully connected in MVP mode. Pro/Plus plan selection can be captured, but payment processing is coming soon.</p></Card>
         <Card title="Contact"><p className="text-sm text-slate-300">Contact placeholder: support@sva.app (MVP inbox).</p></Card>
+              <Card title="Terms"><p className="text-sm text-slate-300">MVP terms coming soon.</p></Card>
+        <Card title="Last updated"><p className="text-sm text-slate-300">May 2026</p></Card>
       </main>
     </div>
   );
