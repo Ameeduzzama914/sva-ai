@@ -182,7 +182,7 @@ ${evidenceReport}
   return (
     <div className="min-h-screen bg-[#0B0F1A] text-slate-100">
       <div className="mx-auto flex max-w-[1600px]">
-        <AppSidebar contradictionCount={contradictionCount} isLoggedIn={Boolean(session)} onLogout={() => { logout(); router.push("/login"); }} />
+        <AppSidebar contradictionCount={contradictionCount} isLoggedIn={Boolean(session)} remainingToday={usage?.remaining ?? 10} onLogout={() => { logout(); router.push("/login"); }} />
 
         <main className="flex-1 space-y-4 p-5">
           <Card><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="text-slate-300">{session ? `${session.email} · ${session.plan.toUpperCase()} plan` : "Guest session"}</p><div className="flex items-center gap-2">{usage ? <Badge variant={usage.remaining===0?"danger":"success"}>Remaining today: {usage.remaining}/{usage.limit}</Badge> : null}<Button variant="ghost" type="button" onClick={()=>{logout(); router.push("/login");}}>Logout</Button></div></div></Card>

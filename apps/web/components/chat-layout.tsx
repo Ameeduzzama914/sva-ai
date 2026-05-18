@@ -333,7 +333,7 @@ export const ChatLayout = () => {
         {activeNav === "Saved" || activeNav === "Models" || activeNav === "Settings" ? (
           <section className="panel">
             <h3>{activeNav}</h3>
-            <p className="muted-line">This panel is intentionally minimal in MVP mode.</p>
+            <p className="muted-line">This panel is intentionally minimal in Beta mode.</p>
           </section>
         ) : null}
 
