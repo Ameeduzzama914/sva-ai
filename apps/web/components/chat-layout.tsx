@@ -397,6 +397,13 @@ export const ChatLayout = () => {
                 </p>
                 <p className="muted-line">Final Answer: {verification.finalAnswer}</p>
                 <p className="muted-line">Why this answer? {verification.reasoning || verification.explanation}</p>
+                {verification.verificationBadges?.length ? (
+                  <div className="chip-row">
+                    {verification.verificationBadges.map((badge, idx) => (
+                      <span className="chip" key={`${badge}-${idx}`}>{badge}</span>
+                    ))}
+                  </div>
+                ) : null}
                 <p>
                   <strong>SVA Judge:</strong> {(verification.judgeVerdict ?? "caution").toUpperCase()}
                 </p>
@@ -464,13 +471,14 @@ export const ChatLayout = () => {
 
           <section className="panel">
             <h3>Claim-Level Verification</h3>
+            {verification?.contradictionSeverity ? <p className="muted-line">Contradiction severity: <strong>{verification.contradictionSeverity.toUpperCase()}</strong></p> : null}
             {verification?.claimVerifications?.length ? (
               <div className="history-list">
                 {verification.claimVerifications.map((claim) => (
                   <article className="history-item" key={claim.id}>
                     <strong>{claim.claim}</strong>
                     <small>
-                      {claim.status} • {claim.confidenceScore}/100
+                      {claim.status} • {claim.confidenceScore}/100 • {claim.category ?? "general"}
                     </small>
                     <p>{claim.explanation}</p>
                   </article>
@@ -480,6 +488,19 @@ export const ChatLayout = () => {
               <p className="muted-line">No claim-level checks yet.</p>
             )}
           </section>
+        </section>
+
+        <section className="panel">
+          <h3>Verification Sections</h3>
+          {verification?.sections ? (
+            <div className="history-list">
+              <article className="history-item"><strong>Core Conclusion</strong><p>{verification.sections.coreConclusion}</p></article>
+              <article className="history-item"><strong>Evidence Summary</strong><p>{verification.sections.evidenceSummary}</p></article>
+              <article className="history-item"><strong>Risks & Caveats</strong><p>{verification.sections.risksAndCaveats}</p></article>
+              <article className="history-item"><strong>Contradictions</strong><p>{verification.sections.contradictions}</p></article>
+              <article className="history-item"><strong>Scientific Consensus Summary</strong><p>{verification.sections.scientificConsensusSummary}</p></article>
+            </div>
+          ) : <p className="muted-line">Run verification to generate sectioned analysis.</p>}
         </section>
 
         <section className="panel">

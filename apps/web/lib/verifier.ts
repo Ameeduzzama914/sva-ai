@@ -357,6 +357,32 @@ const computeEvidenceMetrics = (
   return { evidenceStrength, sourceQuality, credibility, evidenceCoverage };
 };
 
+function claimCategory(claim: string): "benefit" | "risk" | "safety" | "effectiveness" | "contradiction" | "general" {
+  const text = claim.toLowerCase();
+
+  if (/(risk|harm|side effect|damage|danger|unsafe|concern|dehydration|kidney|hair loss|cramp|injury)/.test(text)) {
+    return "risk";
+  }
+
+  if (/(safe|safety|tolerated|long term|healthy|no evidence of harm)/.test(text)) {
+    return "safety";
+  }
+
+  if (/(improve|increase|benefit|support|enhance|growth|strength|recovery|performance|health)/.test(text)) {
+    return "benefit";
+  }
+
+  if (/(effective|works|proven|evidence|trial|meta-analysis|study|studies)/.test(text)) {
+    return "effectiveness";
+  }
+
+  if (/(contradict|dispute|conflict|opposite|myth|debunk|false|unsupported)/.test(text)) {
+    return "contradiction";
+  }
+
+  return "general";
+}
+
 const contradictionMetrics = (
   responses: ModelResponse[],
   sharedCore: Set<string>
@@ -409,6 +435,16 @@ const consensusAlignmentScore = (evidenceSnippets: EvidenceSnippet[], agreementS
       Math.max(1, evidenceSnippets.length)
   );
   return Math.max(0, Math.min(100, Math.round(weightedEvidence * 0.6 + agreementScore * 0.25 + authoritative * 4 + diversity * 2)));
+};
+
+const contradictionSeverityLabel = (score: number): "low" | "medium" | "high" => {
+  if (score >= 70) {
+    return "high";
+  }
+  if (score >= 35) {
+    return "medium";
+  }
+  return "low";
 };
 
 
@@ -792,6 +828,7 @@ const verifyClaims = (
       " "
     )})${contradictedByModels.length > 0 ? `, with contradiction signals from ${listModels(contradictedByModels)}.` : "."}`;
     const linkedEvidenceIds = supportingEvidence.map((item) => item.sourceId ?? item.url ?? item.title);
+    const category = claimCategory(claim);
     console.log("SVA_DEBUG_CLAIM_SCORE", { claim, evidenceScore, modelSupportScore, contradictionPenaltyScore, finalConfidence, status, contradictedByModels, linkedEvidenceIds, evidenceRelevanceScore, evidenceCredibilityScore, topSimilarities: scoredEvidence.slice(0,3).map((e) => ({ id: e.snippet.sourceId ?? e.snippet.url ?? e.snippet.title, score: Number(e.score.toFixed(3)) })) });
 
     return {
@@ -805,9 +842,43 @@ const verifyClaims = (
       evidenceRelevanceScore,
       evidenceCredibilityScore,
       contradictedByModels,
+      category: category as ClaimVerification["category"],
       explanation
     };
   });
+};
+
+const buildVerificationSections = (finalAnswerCore: string, evidenceSnippets: EvidenceSnippet[], contradictionText: string, contradictionScore: number, consensusLabel: string): {coreConclusion:string;evidenceSummary:string;risksAndCaveats:string;contradictions:string;scientificConsensusSummary:string} => {
+  const topEvidence = evidenceSnippets.slice(0, 3).map((e) => `- ${e.title} (${e.sourceDomain ?? "source"}, trust ${e.credibilityScore ?? e.sourceQualityScore ?? sourceQualityForSnippet(e)}%)`).join("\n");
+  return {
+    coreConclusion: finalAnswerCore,
+    evidenceSummary: topEvidence || "- Evidence exists but could not be summarized cleanly.",
+    risksAndCaveats: contradictionScore > 35 ? "There are notable caveats due to disagreement and/or limited source quality." : "Primary caveat: evidence quality varies by source; use context-specific judgment.",
+    contradictions: contradictionText,
+    scientificConsensusSummary: `${consensusLabel}. ${evidenceSnippets.length > 0 ? "Consensus is grounded in retrieved sources." : "Consensus is model-derived due to missing retrieval evidence."}`
+  };
+};
+
+const cleanSnippetText = (text: string): string => text.replace(/\s+/g, " ").replace(/\[\d+\]/g, "").trim();
+
+const dedupeAndPrioritizeEvidence = (snippets: EvidenceSnippet[]): EvidenceSnippet[] => {
+  const seen = new Set<string>();
+  const unique = snippets.filter((snippet) => {
+    const urlKey = (snippet.url ?? "").trim().toLowerCase();
+    const textKey = cleanSnippetText(snippet.text).slice(0, 120).toLowerCase();
+    const key = `${urlKey}|${textKey}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return unique
+    .map((snippet) => {
+      const quality = snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet);
+      const highValueBoost = /pmc|nih|\.edu|systematic review|meta-analysis|who\.int|cdc\.gov/i.test(`${snippet.url ?? ""} ${snippet.title} ${snippet.text}`) ? 8 : 0;
+      return { ...snippet, text: cleanSnippetText(snippet.text), sourceQualityScore: quality + highValueBoost, credibilityScore: Math.max(snippet.credibilityScore ?? 0, quality + highValueBoost) };
+    })
+    .sort((a, b) => ((b.credibilityScore ?? 0) + b.relevanceScore) - ((a.credibilityScore ?? 0) + a.relevanceScore));
 };
 
 const buildFocusedRetrievalQueries = (prompt: string): string[] => {
@@ -832,7 +903,7 @@ export const buildResponsesForPrompt = async (
     const key = snippet.sourceId ?? snippet.url ?? `${snippet.title}-${snippet.text.slice(0, 40)}`;
     return arr.findIndex((candidate) => (candidate.sourceId ?? candidate.url ?? `${candidate.title}-${candidate.text.slice(0, 40)}`) === key) === idx;
   });
-  const evidenceSnippets = mergedSnippets.map((snippet) => {
+  const evidenceSnippets = dedupeAndPrioritizeEvidence(mergedSnippets).map((snippet) => {
     const normalizedQuality = Math.max(40, snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet));
     return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
   });
@@ -1135,8 +1206,8 @@ export const verifyResponses = (
   );
   const consensusLabel = consensusBand(agreementScore, contradiction.contradictionScore);
   const topEvidence = evidenceSnippets.slice(0, 3).map((s) => `- ${s.title} (${s.sourceDomain ?? "source"}, credibility ${s.credibilityScore ?? s.sourceQualityScore ?? sourceQualityForSnippet(s)}%)`).join("\n");
-  const contradictionSeverity = contradiction.contradictionScore <= 15 ? "none" : contradiction.contradictionScore <= 40 ? "low" : contradiction.contradictionScore <= 70 ? "moderate" : "severe";
-  const contradictionExplanation = contradictionSeverity === "none" ? "No major contradiction detected" : contradiction.contradictionType === "contextual" ? "Contextual disagreement detected" : contradiction.contradictionType === "direct" ? "High-quality sources directly disagree" : "Evidence is mixed across sources";
+  const contradictionSeverityText = contradictionSeverityLabel(contradiction.contradictionScore);
+  const contradictionExplanation = contradiction.contradictionScore <= 15 ? "No major contradiction detected" : contradiction.contradictionType === "contextual" ? "Contextual disagreement detected" : contradiction.contradictionType === "direct" ? "High-quality sources directly disagree" : "Evidence is mixed across sources";
   const evidenceQualityNote = sourceQualityScore < 55 ? "Evidence quality is mixed." : "Evidence quality is strong overall.";
   const unified = {
     verdict:
