@@ -402,6 +402,27 @@ const consensusAlignmentScore = (evidenceSnippets: EvidenceSnippet[], agreementS
   return Math.max(0, Math.min(100, Math.round(weightedEvidence * 0.6 + agreementScore * 0.25 + authoritative * 4 + diversity * 2)));
 };
 
+
+const clamp = (v:number,min=0,max=100)=>Math.max(min,Math.min(max,v));
+
+const unifiedTrustScore = (input:{agreement:number;evidence:number;source:number;contradiction:number;claimSupport:number;contradictionType:"direct"|"temporal"|"consensus_shift"|"contextual";}):{score:number;contradictionImpact:number;reliability:VerificationResult["confidenceLabel"];verdict:string} => {
+  const contradictionImpact = input.contradictionType === "direct"
+    ? clamp(100 - input.contradiction * 1.25)
+    : input.contradictionType === "contextual"
+      ? clamp(100 - input.contradiction * 0.55)
+      : clamp(100 - input.contradiction * 0.8);
+  const weighted =
+    input.agreement * 0.30 +
+    input.evidence * 0.25 +
+    input.source * 0.20 +
+    contradictionImpact * 0.15 +
+    input.claimSupport * 0.10;
+  const score = Math.round(clamp(weighted));
+  const reliability = score >= 90 ? "Very High" : score >= 75 ? "High" : score >= 60 ? "Medium" : score >= 40 ? "Low" : "Low";
+  const verdict = score >= 85 ? "VERIFIED" : score >= 70 ? "LIKELY RELIABLE" : score >= 55 ? "MIXED / NEEDS CONTEXT" : score >= 40 ? "LOW CONFIDENCE" : "NOT RELIABLY SUPPORTED";
+  return { score, contradictionImpact, reliability, verdict };
+};
+
 const consensusBand = (agreementScore: number, contradictionScore: number): "High Consensus" | "Moderate Consensus" | "Split Consensus" | "Contradictory Results" => {
   if (contradictionScore >= 60) return "Contradictory Results";
   if (agreementScore >= 78 && contradictionScore <= 25) return "High Consensus";
@@ -1103,7 +1124,24 @@ export const verifyResponses = (
   );
   const consensusLabel = consensusBand(agreementScore, contradiction.contradictionScore);
   const topEvidence = evidenceSnippets.slice(0, 3).map((s) => `- ${s.title} (${s.sourceDomain ?? "source"}, credibility ${s.credibilityScore ?? s.sourceQualityScore ?? sourceQualityForSnippet(s)}%)`).join("\n");
-  const finalAnswer = `Quick Verdict: ${adjustedFinalConfidence >= 80 ? "Likely Reliable" : adjustedFinalConfidence >= 65 ? "Moderately Reliable" : adjustedFinalConfidence >= 40 ? "Uncertain" : "Low Reliability"}\n\nCore Conclusion: ${coreAnswer}\n\nSupporting Evidence:\n${topEvidence || "- Limited external evidence returned."}\n\nRisks / Caveats: Contradiction score ${contradiction.contradictionScore}/100, source quality ${sourceQualityScore}/100.\n\nContradictions Detected: ${contradiction.contradictionType} (${contradiction.contradictionScore}/100).\n\nConsensus Summary: ${consensusLabel} — majority ${listModels(majorityModels)}${outlierModels.length ? `; outliers ${listModels(outlierModels)}` : ""}.\n\nFinal Confidence: ${adjustedFinalConfidence}/100 (${adjustedFinalConfidence >= 85 ? "Very High" : adjustedFinalConfidence >= 70 ? "High" : adjustedFinalConfidence >= 40 ? "Medium" : "Low"}).`;
+  const contradictionExplanation = contradiction.contradictionScore === 0 ? "No major contradiction detected" : contradiction.contradictionType === "contextual" ? "Contextual disagreement detected" : contradiction.contradictionType === "direct" ? "High-quality sources directly disagree" : "Evidence is mixed across sources";
+  const evidenceQualityNote = sourceQualityScore < 55 ? "Evidence quality is mixed." : "Evidence quality is strong overall.";
+  const unified = {
+    verdict:
+      adjustedFinalConfidence >= 75
+        ? "Likely Reliable"
+        : adjustedFinalConfidence >= 55
+          ? "Use With Caution"
+          : "Not Reliable Yet",
+    reliability:
+      adjustedFinalConfidence >= 75
+        ? "High"
+        : adjustedFinalConfidence >= 55
+          ? "Medium"
+          : "Low",
+    contradictionImpact: Math.max(0, 100 - contradiction.contradictionScore)
+  };
+  const finalAnswer = `Quick Verdict: ${unified.verdict} — ${adjustedFinalConfidence}/100 (${unified.reliability} Reliability)\n\nCore Conclusion: ${coreAnswer}\n\nSupporting Evidence:\n${topEvidence || "- Limited external evidence returned."}\n\nRisks / Caveats: ${evidenceQualityNote} Contradiction score ${contradiction.contradictionScore}/100, source quality ${sourceQualityScore}/100.\n\nContradictions: ${contradictionExplanation} (${contradiction.contradictionScore}/100).\n\nConsensus Summary: ${consensusLabel} — majority ${listModels(majorityModels)}${outlierModels.length ? `; outliers ${listModels(outlierModels)}` : ""}.\n\nFinal Confidence: ${adjustedFinalConfidence}/100 — ${unified.reliability} Reliability.`;
 
   const reasoning = `All models were compared semantically. ${largestGroup.length}/${responses.length} responses clustered into the majority (agreement ${agreementScore}/100). Majority models: ${listModels(
     majorityModels
@@ -1120,7 +1158,17 @@ export const verifyResponses = (
   } Evidence alignment scored ${evidenceAlignmentScore}/100 with source quality ${sourceQualityScore}/100. Contradictions contributed a penalty of ${contradiction.contradictionPenalty}.${allProvidersFallback ? "" : ""} ${confidenceReason(
     confidence.label
   )}`;
-  const claimVerifications = verifyClaims(finalAnswer, responses, evidenceSnippets, outlierModels);
+  let claimVerifications = verifyClaims(finalAnswer, responses, evidenceSnippets, outlierModels);
+  claimVerifications = claimVerifications.map((claim)=>{
+    const credibleLinks = claim.supportingEvidence.filter((ev)=> (ev.credibilityScore ?? ev.sourceQualityScore ?? sourceQualityForSnippet(ev)) >= 70).length;
+    if (claim.status === "insufficient_evidence" && credibleLinks >= 2) {
+      return {...claim, status:"partially_supported", confidenceScore: Math.max(55, claim.confidenceScore), explanation: "Multiple credible sources support parts of this claim, but context or precision limits full support."};
+    }
+    if ((claim.status === "weak_support" || claim.status === "weakly_supported") && credibleLinks >= 2) {
+      return {...claim, status:"supported", confidenceScore: Math.max(68, claim.confidenceScore)};
+    }
+    return claim;
+  });
   const unsupportedClaims = claimVerifications.filter((claim) => claim.status === "insufficient_evidence").length;
   const contradictedClaims = claimVerifications.filter((claim) => claim.status === "contradicted").length;
   const disputedClaims = claimVerifications.filter((claim) => claim.status === "disputed").length;
@@ -1135,6 +1183,17 @@ export const verifyResponses = (
     adjustedFinalConfidence = Math.max(0, adjustedFinalConfidence - contradictedClaims * 10);
   }
   const normalizedContradictionScore = Math.max(contradiction.contradictionScore, derivedContradictionFloor);
+  const claimSupportPercent = claimVerifications.length === 0 ? 45 : Math.round((claimVerifications.filter((c)=>["supported","strongly_supported","partially_supported"].includes(c.status)).length / claimVerifications.length) * 100);
+  const unifiedScored = unifiedTrustScore({
+    agreement: agreementScore,
+    evidence: evidenceAlignmentScore,
+    source: sourceQualityScore,
+    contradiction: normalizedContradictionScore,
+    claimSupport: claimSupportPercent,
+    contradictionType: contradiction.contradictionType
+  });
+  adjustedFinalConfidence = unifiedScored.score;
+
   const judge = buildJudgeAssessment({
     finalConfidenceScore: adjustedFinalConfidence,
     evidenceAlignmentScore,
@@ -1173,7 +1232,7 @@ export const verifyResponses = (
       agreementContribution: Math.round((agreementScore * modeWeights[mode].agreement) / 100),
       evidenceContribution: Math.round((evidenceAlignmentScore * modeWeights[mode].evidence) / 100),
       sourceContribution: Math.round((sourceQualityScore * modeWeights[mode].source) / 100),
-      contradictionImpact: contradiction.contradictionPenalty
+      contradictionImpact: Math.round(unifiedScored.contradictionImpact)
     },
     whyNotHigher:
       confidence.score >= 90
@@ -1188,7 +1247,7 @@ export const verifyResponses = (
         ? `Research mode prioritized evidence-backed synthesis from ${evidenceSnippets.length} snippets and weighted outlier handling across providers.`
         : undefined,
     judgeVerdict: judge.judgeVerdict,
-    judgeSummary: judge.judgeSummary,
+    judgeSummary: unifiedScored.verdict,
     judgeRiskFlags: judge.judgeRiskFlags,
     debug: {
       groupScores,

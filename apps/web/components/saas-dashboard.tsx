@@ -325,7 +325,7 @@ ${evidenceReport}
                     <p className="text-xs text-slate-400">
                       {isDemoMode
                         ? "Connect live provider API keys to generate a real trust score."
-                        : "Confidence is derived from agreement, evidence, source quality, and contradiction impact."}
+                        : "Confidence is derived from agreement, evidence, source quality, contradiction impact, and claim coverage."}
                     </p>
                   </div>
                 </div>
@@ -335,9 +335,8 @@ ${evidenceReport}
                     { label: "Model Agreement", value: verification?.agreementScore ?? 0 },
                     { label: "Evidence Strength", value: verification?.evidenceAlignmentScore ?? 0 },
                     { label: "Source Quality", value: verification?.sourceQualityScore ?? 0 },
-                    { label: "Evidence Diversity", value: evidenceDiversity > 0 ? Math.min(100, evidenceDiversity * 20) : 0 },
-                    { label: "Minority Opposition", value: minorityOppositionLevel },
-                    { label: "Consistency", value: Math.max(0, 100 - (verification?.contradictionScore ?? 0)) }
+                    { label: "Contradiction Impact", value: verification?.trustBreakdown ? verification.trustBreakdown.contradictionImpact : Math.max(0, 100 - (verification?.contradictionScore ?? 0)) },
+                    { label: "Claim Coverage", value: verification?.claimVerifications?.length ? Math.round((verification.claimVerifications.filter((c) => ["supported","strongly_supported","partially_supported"].includes(c.status)).length / verification.claimVerifications.length) * 100) : 0 }
                   ].map((item) => (
                     <div key={item.label}>
                       <div className="mb-1 flex justify-between text-xs text-slate-300">
@@ -351,7 +350,7 @@ ${evidenceReport}
                   ))}
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">
-                  <p className="font-semibold text-slate-100">Why this score?</p>
+                  <p className="font-semibold text-slate-100">Consensus Meter</p><p className="mt-1">{verification ? (verification.outlierModels.length === 0 ? `HIGH • ${verification.majorityModels.length}/3 models aligned. No outliers detected.` : verification.outlierModels.length === 1 ? `MODERATE • 2 agree • 1 outlier (${verification.outlierModels.join(", ")}).` : `SPLIT • Models show high disagreement.`) : "Run verification to calculate consensus."}</p><p className="mt-2 font-semibold text-slate-100">Why this score?</p>
                   <p className="mt-1">Model agreement: {verification?.agreementScore ?? 0}% — how closely the AI answers match.</p>
                   <p>Evidence strength: {verification?.evidenceAlignmentScore ?? 0}% — how well external sources support the answer.</p>
                   <p>Contradiction score: {verification?.contradictionScore ?? 0}% — lower is better.</p>
@@ -436,7 +435,7 @@ ${evidenceReport}
                   <p className="text-slate-400">
                     Sources retrieved: {evidenceSnippets.length} · Snippets extracted: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
                   </p>
-                  {evidenceSnippets.map((snippet, idx) => {
+                  {[...evidenceSnippets].sort((a, b) => ((b.credibilityScore ?? b.sourceQualityScore ?? 0) - (a.credibilityScore ?? a.sourceQualityScore ?? 0))).map((snippet, idx) => {
                     const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
                     const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];
                     return (
