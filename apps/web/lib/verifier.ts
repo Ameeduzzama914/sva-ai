@@ -276,18 +276,18 @@ const sourceQualityForSnippet = (snippet: EvidenceSnippet): number => {
   const authority = scoreDomainAuthority(domain);
 
   if (HIGHEST_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return Math.max(authority, domain.includes('.gov') || domain.includes('.edu') || domain.includes('pubmed') ? 96 : 90);
+    return Math.min(95, Math.max(85, authority));
   }
   if (MEDIUM_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return Math.max(72, Math.min(88, authority));
+    return Math.min(85, Math.max(65, authority));
   }
   if (LOW_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return Math.min(40, authority);
+    return Math.min(45, Math.max(20, authority));
   }
   if (snippet.text.length < 50 || /click|buy now|sponsored|top 10|best ever/.test(text)) {
-    return 30;
+    return 28;
   }
-  return Math.min(75, Math.max(45, authority));
+  return Math.min(80, Math.max(40, authority));
 };
 
 const computeSourceQualityScore = (evidenceSnippets: EvidenceSnippet[]): number => {
@@ -299,7 +299,7 @@ const computeSourceQualityScore = (evidenceSnippets: EvidenceSnippet[]): number 
     evidenceSnippets.reduce((sum, snippet) => sum + (snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet)), 0) /
       evidenceSnippets.length
   );
-  return Math.max(35, computed);
+  return Math.max(0, Math.min(100, computed));
 };
 
 const computeEvidenceAlignment = (
@@ -441,14 +441,14 @@ const contradictionSeverityLabel = (score: number): "low" | "medium" | "high" =>
   if (score >= 70) {
     return "high";
   }
-  if (score >= 35) {
+  if (score >= 25) {
     return "medium";
   }
   return "low";
 };
 
 const mapConfidenceLabel = (score: number): VerificationResult["confidenceLabel"] =>
-  score >= 90 ? "Very High" : score >= 75 ? "High" : score >= 60 ? "Medium" : "Low";
+  score >= 90 ? "Very High" : score >= 75 ? "High" : score >= 40 ? "Medium" : "Low";
 
 
 const clamp = (v:number,min=0,max=100)=>Math.max(min,Math.min(max,v));
@@ -1286,6 +1286,10 @@ export const verifyResponses = (
     contradictionType: contradiction.contradictionType
   });
   adjustedFinalConfidence = unifiedScored.score;
+  if (evidenceSnippets.length < 2) adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 72);
+  if (evidenceAlignmentScore < 50) adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 76);
+  if (normalizedContradictionScore >= 55) adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 62);
+  adjustedFinalConfidence = Math.max(0, Math.min(100, adjustedFinalConfidence));
   const falsePremise = detectFalsePremise(prompt, responses);
   if (falsePremise) adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 35);
   const nuancedVerdict = falsePremise

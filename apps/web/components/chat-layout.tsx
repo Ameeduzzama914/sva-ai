@@ -492,13 +492,13 @@ export const ChatLayout = () => {
 
         <section className="panel">
           <h3>Verification Sections</h3>
-          {verification?.sections ? (
+          {verification?.sections && Object.values(verification.sections).some((sectionText) => sectionText && sectionText.trim().length > 0) ? (
             <div className="history-list">
-              <article className="history-item"><strong>Core Conclusion</strong><p>{verification.sections.coreConclusion}</p></article>
-              <article className="history-item"><strong>Evidence Summary</strong><p>{verification.sections.evidenceSummary}</p></article>
-              <article className="history-item"><strong>Risks & Caveats</strong><p>{verification.sections.risksAndCaveats}</p></article>
-              <article className="history-item"><strong>Contradictions</strong><p>{verification.sections.contradictions}</p></article>
-              <article className="history-item"><strong>Scientific Consensus Summary</strong><p>{verification.sections.scientificConsensusSummary}</p></article>
+              {verification.sections.coreConclusion?.trim() ? <article className="history-item"><strong>Core Conclusion</strong><p>{verification.sections.coreConclusion}</p></article> : null}
+              {verification.sections.evidenceSummary?.trim() ? <article className="history-item"><strong>Evidence Summary</strong><p>{verification.sections.evidenceSummary}</p></article> : null}
+              {verification.sections.risksAndCaveats?.trim() ? <article className="history-item"><strong>Risks & Caveats</strong><p>{verification.sections.risksAndCaveats}</p></article> : null}
+              {verification.sections.contradictions?.trim() ? <article className="history-item"><strong>Contradictions</strong><p>{verification.sections.contradictions}</p></article> : null}
+              {verification.sections.scientificConsensusSummary?.trim() ? <article className="history-item"><strong>Scientific Consensus Summary</strong><p>{verification.sections.scientificConsensusSummary}</p></article> : null}
             </div>
           ) : <p className="muted-line">Run verification to generate sectioned analysis.</p>}
         </section>
