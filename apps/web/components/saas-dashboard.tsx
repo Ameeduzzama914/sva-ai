@@ -135,6 +135,17 @@ export const SaasDashboard = () => {
           ? "Weak Reliability"
           : "Awaiting verification";
 
+
+  const getEvidenceScore = (s: EvidenceSnippet): number => s.credibilityScore ?? s.sourceQualityScore ?? 0;
+
+  const evidenceGroups = useMemo(() => {
+    const sorted = [...evidenceSnippets].sort((a, b) => getEvidenceScore(b) - getEvidenceScore(a));
+    const top = sorted.filter((s) => getEvidenceScore(s) >= 85);
+    const support = sorted.filter((s) => getEvidenceScore(s) >= 60 && getEvidenceScore(s) < 85);
+    const weak = sorted.filter((s) => getEvidenceScore(s) < 60);
+    return { top, support, weak };
+  }, [evidenceSnippets]);
+
   const handleCopyAnswer = async () => {
     if (!verification?.finalAnswer) return;
     await navigator.clipboard.writeText(verification.finalAnswer);
@@ -458,7 +469,7 @@ ${evidenceReport}
                   <p className="text-slate-400">
                     Sources retrieved: {evidenceSnippets.length} · Snippets extracted: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
                   </p>
-                  {[...evidenceSnippets].sort((a, b) => ((b.credibilityScore ?? b.sourceQualityScore ?? 0) - (a.credibilityScore ?? a.sourceQualityScore ?? 0))).map((snippet, idx) => {
+                  {evidenceGroups.top.map((snippet, idx) => {
                     const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
                     const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];
                     return (
@@ -487,6 +498,8 @@ ${evidenceReport}
                       </article>
                     );
                   })}
+                  {evidenceGroups.support.length ? <details className="rounded-lg border border-slate-800 p-2"><summary className="cursor-pointer text-slate-300">Supporting Evidence ({evidenceGroups.support.length})</summary><div className="mt-2 space-y-2">{evidenceGroups.support.map((snippet, idx)=> <article key={`sup-${snippet.title}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2"><p className="font-semibold text-slate-200">{snippet.title}</p><p className="text-slate-400">{snippet.text}</p></article>)}</div></details> : null}
+                  {evidenceGroups.weak.length ? <details className="rounded-lg border border-amber-700/40 p-2"><summary className="cursor-pointer text-amber-300">Lower Confidence / Contextual Sources ({evidenceGroups.weak.length})</summary><div className="mt-2 space-y-2">{evidenceGroups.weak.map((snippet, idx)=> <article key={`weak-${snippet.title}-${idx}`} className="rounded-lg border border-amber-700/30 bg-amber-900/10 p-2"><p className="font-semibold text-amber-100">{snippet.title}</p><p className="text-amber-200/80">{snippet.text}</p></article>)}</div></details> : null}
                 </div>
               ) : (
                 <p className="text-xs text-slate-400">

@@ -12,6 +12,7 @@ import {
 } from "./models";
 import { extractClaims } from "./claims";
 import { retrievalProvider } from "./retrieval";
+import { scoreDomainAuthority, sourceCategory, sourceTrustLabel } from "./sourceAuthority";
 
 const STOPWORDS = new Set([
   "the",
@@ -265,20 +266,21 @@ const parseDomain = (url?: string): string => {
 const sourceQualityForSnippet = (snippet: EvidenceSnippet): number => {
   const domain = parseDomain(snippet.url);
   const text = `${snippet.title} ${snippet.text}`.toLowerCase();
+  const authority = scoreDomainAuthority(domain);
 
   if (HIGHEST_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return domain.includes('.gov') || domain.includes('.edu') || domain.includes('pubmed') ? 96 : 90;
+    return Math.max(authority, domain.includes('.gov') || domain.includes('.edu') || domain.includes('pubmed') ? 96 : 90);
   }
   if (MEDIUM_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return 72;
+    return Math.max(72, Math.min(88, authority));
   }
   if (LOW_TRUST_HINTS.some((item) => domain.includes(item) || text.includes(item))) {
-    return 38;
+    return Math.min(40, authority);
   }
   if (snippet.text.length < 50 || /click|buy now|sponsored|top 10|best ever/.test(text)) {
     return 30;
   }
-  return 62;
+  return Math.min(75, Math.max(45, authority));
 };
 
 const computeSourceQualityScore = (evidenceSnippets: EvidenceSnippet[]): number => {
