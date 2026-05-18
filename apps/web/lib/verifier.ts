@@ -154,6 +154,13 @@ const contradictionPenalty = (a: string, b: string): number => {
   return contradictory ? -0.35 : 0;
 };
 
+const detectFalsePremise = (prompt: string, responses: ModelResponse[]): boolean => {
+  const p = prompt.toLowerCase();
+  const impossible = /humans can breathe on mars|earth is flat|climate change is fake|vaccines cause autism/i.test(p);
+  const contradictionSignals = responses.filter((r)=>/cannot|not true|false|unsupported|no evidence/i.test(r.answer)).length;
+  return impossible || contradictionSignals >= 2;
+};
+
 const detectQueryType = (prompt: string): "factual" | "opinion" | "medical" | "coding" | "financial" | "historical" | "scientific" | "unsafe_or_ambiguous" => {
   const p = prompt.toLowerCase();
   if (/\b(medical|diagnosis|treatment|symptom)\b/.test(p)) return "medical";
@@ -573,7 +580,7 @@ const buildJudgeAssessment = (input: {
   const riskFlags: string[] = [];
   const supportedClaims = input.claimVerifications.filter((claim) => claim.status === "supported").length;
   const weakClaims = input.claimVerifications.filter((claim) =>
-    ["contradicted", "insufficient_evidence", "partially_supported", "disputed"].includes(claim.status)
+    ["contradicted", "insufficient_evidence", "mostly_supported", "disputed"].includes(claim.status)
   ).length;
 
   if (input.evidenceAlignmentScore < 45) {
@@ -655,7 +662,7 @@ const claimStatusFromScore = (
   }
 
   if (finalClaimScore >= 55) {
-    return "partially_supported";
+    return "mostly_supported";
   }
 
   if (finalClaimScore >= 35) {
@@ -762,17 +769,20 @@ const verifyClaims = (
         ? "strongly_supported"
       : strongModelConsensus && evidenceSnippets.length > 0 && hasStrongEvidence
         ? "supported"
-      : evidenceScore >= 60 && modelSupportScore >= 60
+      : evidenceScore >= 65 && modelSupportScore >= 65
         ? "supported"
-        : hasPartialEvidence && modelSupportScore >= 45 && evidenceCredibilityScore >= 55
-          ? "partially_supported"
-          : "insufficient_evidence";
+        : hasPartialEvidence && modelSupportScore >= 50 && evidenceCredibilityScore >= 60
+          ? "mostly_supported"
+          : hasPartialEvidence
+            ? "mixed_evidence"
+            : "insufficient_evidence";
 
     const contradictionPenaltyScore = hasExplicitContradiction ? (evidenceCredibilityScore >= 80 ? 34 : 24) : status === "disputed" ? 10 : 0;
     let finalConfidence = Math.max(0, Math.min(100, Math.round(modelSupportScore * 0.35 + evidenceScore * 0.35 + evidenceCredibilityScore * 0.2 + evidenceRelevanceScore * 0.1 - contradictionPenaltyScore)));
     if (status === "strongly_supported") finalConfidence = Math.max(88, Math.min(97, finalConfidence));
     if (status === "supported") finalConfidence = Math.max(76, Math.min(91, finalConfidence));
-    if (status === "partially_supported") finalConfidence = Math.max(58, Math.min(74, finalConfidence));
+    if (status === "mostly_supported") finalConfidence = Math.max(62, Math.min(79, finalConfidence));
+    if (status === "mixed_evidence") finalConfidence = Math.max(50, Math.min(69, finalConfidence));
     if (status === "insufficient_evidence") finalConfidence = Math.min(59, Math.max(38, finalConfidence));
     if (status === "contradicted") finalConfidence = Math.min(34, finalConfidence);
     if (status === "disputed") finalConfidence = Math.max(45, Math.min(67, finalConfidence));
@@ -1164,9 +1174,9 @@ export const verifyResponses = (
   claimVerifications = claimVerifications.map((claim)=>{
     const credibleLinks = claim.supportingEvidence.filter((ev)=> (ev.credibilityScore ?? ev.sourceQualityScore ?? sourceQualityForSnippet(ev)) >= 70).length;
     if (claim.status === "insufficient_evidence" && credibleLinks >= 2) {
-      return {...claim, status:"partially_supported", confidenceScore: Math.max(55, claim.confidenceScore), explanation: "Multiple credible sources support parts of this claim, but context or precision limits full support."};
+      return {...claim, status:"mostly_supported", confidenceScore: Math.max(55, claim.confidenceScore), explanation: "Multiple credible sources support parts of this claim, but context or precision limits full support."};
     }
-    if ((claim.status === "partially_supported") && credibleLinks >= 2) {
+    if ((claim.status === "mostly_supported") && credibleLinks >= 2) {
       return {...claim, status:"supported", confidenceScore: Math.max(68, claim.confidenceScore)};
     }
     return claim;
@@ -1185,7 +1195,7 @@ export const verifyResponses = (
     adjustedFinalConfidence = Math.max(0, adjustedFinalConfidence - contradictedClaims * 10);
   }
   const normalizedContradictionScore = Math.max(contradiction.contradictionScore, derivedContradictionFloor);
-  const claimSupportPercent = claimVerifications.length === 0 ? 0 : Math.round((claimVerifications.filter((c)=>["supported","strongly_supported","partially_supported"].includes(c.status)).length / claimVerifications.length) * 100);
+  const claimSupportPercent = claimVerifications.length === 0 ? 0 : Math.round((claimVerifications.filter((c)=>["supported","strongly_supported","mostly_supported"].includes(c.status)).length / claimVerifications.length) * 100);
   const unifiedScored = unifiedTrustScore({
     agreement: agreementScore,
     evidence: evidenceAlignmentScore,
@@ -1195,7 +1205,21 @@ export const verifyResponses = (
     contradictionType: contradiction.contradictionType
   });
   adjustedFinalConfidence = unifiedScored.score;
-  const nuancedVerdict = adjustedFinalConfidence >= 90 ? "Strongly Supported" : adjustedFinalConfidence >= 75 ? "Moderately Supported" : adjustedFinalConfidence >= 60 ? "Contextually Reliable" : adjustedFinalConfidence >= 45 ? "Evidence Mixed" : adjustedFinalConfidence >= 30 ? "Weak Evidence" : "Contradictory Evidence";
+  const falsePremise = detectFalsePremise(prompt, responses);
+  if (falsePremise) adjustedFinalConfidence = Math.min(adjustedFinalConfidence, 35);
+  const nuancedVerdict = falsePremise
+    ? "False Premise Detected"
+    : adjustedFinalConfidence >= 85
+      ? "Supported"
+      : adjustedFinalConfidence >= 70
+        ? "Mostly Supported"
+        : adjustedFinalConfidence >= 55
+          ? "Mixed Evidence"
+          : adjustedFinalConfidence >= 40
+            ? "Unverified"
+            : adjustedFinalConfidence >= 25
+              ? "Misleading"
+              : "Contradicted";
 
   const judge = buildJudgeAssessment({
     finalConfidenceScore: adjustedFinalConfidence,
@@ -1249,7 +1273,7 @@ export const verifyResponses = (
       mode === "research"
         ? `Research mode prioritized evidence-backed synthesis from ${evidenceSnippets.length} snippets and weighted outlier handling across providers.`
         : undefined,
-    judgeVerdict: judge.judgeVerdict,
+    judgeVerdict: (falsePremise ? "false_premise_detected" : adjustedFinalConfidence >= 85 ? "supported" : adjustedFinalConfidence >= 70 ? "mostly_supported" : adjustedFinalConfidence >= 55 ? "mixed_evidence" : adjustedFinalConfidence >= 40 ? "unverified" : adjustedFinalConfidence >= 25 ? "misleading" : "contradicted"),
     judgeSummary: nuancedVerdict,
     judgeRiskFlags: judge.judgeRiskFlags,
     debug: {

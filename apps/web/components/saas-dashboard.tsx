@@ -32,11 +32,12 @@ const modelBadgeLabel: Record<ModelName, string> = {
 const statusStyle: Record<string, string> = {
   strongly_supported: "bg-emerald-400/25 text-emerald-200 border-emerald-400/40",
   supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  partially_supported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  mostly_supported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  mixed_evidence: "bg-amber-600/20 text-amber-200 border-amber-600/40",
+  misleading: "bg-orange-600/20 text-orange-200 border-orange-600/40",
   contradicted: "bg-rose-500/20 text-rose-300 border-rose-500/40",
-  unsupported: "bg-rose-500/20 text-rose-300 border-rose-500/40",
-  insufficient_evidence: "bg-slate-500/20 text-slate-300 border-slate-500/40",
-  uncertain: "bg-slate-500/20 text-slate-300 border-slate-500/40"
+  false_premise: "bg-fuchsia-600/20 text-fuchsia-200 border-fuchsia-600/40",
+  insufficient_evidence: "bg-slate-500/20 text-slate-300 border-slate-500/40"
 };
 
 export const SaasDashboard = () => {
@@ -117,7 +118,7 @@ export const SaasDashboard = () => {
   const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
   const trustScore = verification?.finalConfidenceScore ?? 0;
   const evidenceDiversity = new Set(evidenceSnippets.map((snippet) => snippet.sourceDomain).filter(Boolean)).size;
-  const disputedClaimCount = verification?.claimVerifications.filter((claim) => ["disputed", "contradicted", "partially_supported"].includes(claim.status)).length ?? 0;
+  const disputedClaimCount = verification?.claimVerifications.filter((claim) => ["mixed_evidence", "contradicted", "misleading", "false_premise", "insufficient_evidence"].includes(claim.status)).length ?? 0;
   const minorityOppositionLevel = Math.min(100, Math.max(
     Math.round((verification?.contradictionScore ?? 0) * 0.85),
     disputedClaimCount > 0 ? 20 + disputedClaimCount * 10 : 0
@@ -361,7 +362,7 @@ ${evidenceReport}
                     { label: "Evidence Strength", value: verification?.evidenceAlignmentScore ?? 0 },
                     { label: "Source Quality", value: verification?.sourceQualityScore ?? 0 },
                     { label: "Contradiction Impact", value: verification?.trustBreakdown ? verification.trustBreakdown.contradictionImpact : Math.max(0, 100 - (verification?.contradictionScore ?? 0)) },
-                    { label: "Claim Coverage", value: verification?.claimVerifications?.length ? Math.round((verification.claimVerifications.filter((c) => ["supported","strongly_supported","partially_supported"].includes(c.status)).length / verification.claimVerifications.length) * 100) : 0 }
+                    { label: "Claim Coverage", value: verification?.claimVerifications?.length ? Math.round((verification.claimVerifications.filter((c) => ["supported","strongly_supported","mostly_supported"].includes(c.status)).length / verification.claimVerifications.length) * 100) : 0 }
                   ].map((item) => (
                     <div key={item.label}>
                       <div className="mb-1 flex justify-between text-xs text-slate-300">
