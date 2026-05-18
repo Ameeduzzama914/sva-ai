@@ -377,7 +377,7 @@ ${evidenceReport}
                   ))}
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">
-                  <p className="font-semibold text-slate-100">Consensus Meter</p><p className="mt-1">{verification ? (verification.outlierModels.length === 0 ? `HIGH • ${verification.majorityModels.length}/3 models aligned. No outliers detected.` : verification.outlierModels.length === 1 ? `MODERATE • 2 agree • 1 outlier (${verification.outlierModels.join(", ")}).` : `SPLIT • Models show high disagreement.`) : "Run verification to calculate consensus."}</p><p className="mt-2 font-semibold text-slate-100">Why this score?</p>
+                  <p className="font-semibold text-slate-100">Consensus Meter</p><p className="mt-1">{verification ? (verification.outlierModels.length === 0 ? `HIGH • ${verification.majorityModels.length}/3 models aligned. No outliers detected.` : verification.outlierModels.length === 1 ? `MODERATE • 2 agree • 1 outlier (${verification.outlierModels.join(", ")}).` : `PARTIAL CONSENSUS • Models show disagreement and require context.`) : "Run verification to calculate consensus."}</p><p className="mt-2 font-semibold text-slate-100">Why this score?</p>
                   <p className="mt-1">Model agreement: {verification?.agreementScore ?? 0}% — how closely the AI answers match.</p>
                   <p>Evidence strength: {verification?.evidenceAlignmentScore ?? 0}% — how well external sources support the answer.</p>
                   <p>Contradiction score: {verification?.contradictionScore ?? 0}% — lower is better.</p>
@@ -467,8 +467,12 @@ ${evidenceReport}
               ) : evidenceSnippets.length ? (
                 <div className="space-y-3 text-xs">
                   <p className="text-slate-400">
-                    Sources retrieved: {evidenceSnippets.length} · Snippets extracted: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
+                    Sources retrieved: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
                   </p>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-slate-300">
+                    <p className="font-semibold text-slate-100">Evidence Synthesis</p>
+                    <p className="mt-1">{evidenceGroups.top.length} top-trusted sources, {evidenceGroups.support.length} supporting sources, {evidenceGroups.weak.length} lower-confidence contextual sources.</p>
+                  </div>
                   {evidenceGroups.top.map((snippet, idx) => {
                     const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
                     const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];

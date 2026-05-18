@@ -52,6 +52,7 @@ export const extractClaims = (text: string): string[] => {
 
   const unique = new Set<string>();
   const claims: string[] = [];
+  const keys: string[][] = [];
 
   segments.forEach((segment) => {
     const claim = segment.replace(/\s+/g, " ").trim();
@@ -64,7 +65,13 @@ export const extractClaims = (text: string): string[] => {
       return;
     }
 
+    const thisTokens = similarityKey(claim);
+    if (keys.some((k) => tokenOverlap(k, thisTokens) >= 0.78)) {
+      return;
+    }
     unique.add(key);
+    keys.push(thisTokens);
+    if (/source|credibility|http|www\./i.test(claim)) return;
     claims.push(claim.endsWith(".") ? claim : `${claim}.`);
   });
 
@@ -81,3 +88,7 @@ export const extractClaimsWithConfidence = (text: string): ExtractedClaim[] =>
     claim,
     confidence: /\d/.test(claim) ? 0.92 : 0.8
   }));
+
+
+const similarityKey = (claim: string): string[] => normalizeClaim(claim).split(" ").filter((t) => t.length > 3);
+const tokenOverlap = (a: string[], b: string[]): number => { const A=new Set(a); const B=new Set(b); const inter=[...A].filter(x=>B.has(x)).length; const denom=Math.max(1,new Set([...A,...B]).size); return inter/denom; };
