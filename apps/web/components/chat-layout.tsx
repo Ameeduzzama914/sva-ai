@@ -64,6 +64,7 @@ export const ChatLayout = () => {
   const [password, setPassword] = useState("");
   const [activeNav, setActiveNav] = useState<NavItem>("New Query");
   const [hasSubmittedVerification, setHasSubmittedVerification] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const loadSession = useCallback(async () => {
     const response = await fetch("/api/auth/me");
@@ -137,6 +138,7 @@ export const ChatLayout = () => {
     setEvidenceSnippets([]);
     setVerification(null);
     setMeta(null);
+    setWarnings([]);
 
     try {
       const response = await fetch("/api/verify", {
@@ -155,6 +157,7 @@ export const ChatLayout = () => {
       setEvidenceSnippets(data.evidenceSnippets);
       setVerification(data.verification);
       setMeta(data.meta);
+      setWarnings(data.warnings ?? []);
       setActiveNav("New Query");
       if (user) {
         await Promise.all([loadHistory(), loadSession()]);
@@ -277,6 +280,7 @@ export const ChatLayout = () => {
                 setMeta(null);
                 setErrorMessage(null);
                 setHasSubmittedVerification(false);
+                setWarnings([]);
               }}
               placeholder="Ask anything. SVA will verify it."
               required
@@ -302,6 +306,17 @@ export const ChatLayout = () => {
             </div>
           </form>
         </section>
+
+        {warnings.length > 0 ? (
+          <section className="panel border border-amber-700/40 bg-amber-900/10">
+            <h3>Verification Warnings</h3>
+            <ul className="risk-list">
+              {warnings.map((warning, idx) => (
+                <li key={`${warning}-${idx}`}>⚠️ {warning}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {errorMessage ? (
           <section className="panel error-card">
@@ -428,8 +443,17 @@ export const ChatLayout = () => {
                 {evidenceSnippets.map((snippet: EvidenceSnippet, idx: number) => (
                   <article className="history-item" key={`${snippet.title}-${idx}`}>
                     <strong>{snippet.title}</strong>
-                    <small>{snippet.sourceType}</small>
+                    <small>
+                      {snippet.sourceType}
+                      {snippet.trustTier ? ` • ${snippet.trustTier}` : ""}
+                      {snippet.sourceDomain ? ` • ${snippet.sourceDomain}` : ""}
+                    </small>
                     <p>{snippet.text}</p>
+                    {snippet.url ? (
+                      <a className="muted-line" href={snippet.url} target="_blank" rel="noreferrer">
+                        View source
+                      </a>
+                    ) : null}
                   </article>
                 ))}
               </div>
@@ -462,7 +486,7 @@ export const ChatLayout = () => {
           <h3>Execution Debug</h3>
           {meta ? (
             <p className="muted-line">
-              Provider mode: {meta.mode} • Retrieval mode: {meta.retrievalModeUsed} • Sources: {meta.retrievalSourceCount}
+              Provider mode: {meta.mode} • Retrieval mode: {meta.retrievalModeUsed} • Sources: {meta.retrievalSourceCount} • Response quality: {meta.responseQualityFlag ?? "normal"}
             </p>
           ) : (
             <p className="muted-line">No execution metadata yet.</p>
