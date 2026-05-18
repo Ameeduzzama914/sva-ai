@@ -148,6 +148,22 @@ export const SaasDashboard = () => {
     return words.length > 45 ? `${words.slice(0, 45).join(" ")}…` : answer;
   };
 
+
+  const structuredAnswer = useMemo(() => {
+    if (!verification?.finalAnswer) return null;
+    const sections = verification.finalAnswer.split(/\n\n+/);
+    const read = (prefix: string) => sections.find((s) => s.startsWith(prefix))?.replace(prefix, "").trim();
+    return {
+      quickVerdict: read("Quick Verdict:"),
+      coreConclusion: read("Core Conclusion:"),
+      supportingEvidence: read("Supporting Evidence:"),
+      risks: read("Risks / Caveats:"),
+      contradictions: read("Contradictions:"),
+      consensus: read("Consensus Summary:"),
+      finalConfidence: read("Final Confidence:")
+    };
+  }, [verification]);
+
   const handleExportReport = () => {
     if (!verification) return;
     const modelReport = visibleModels
@@ -365,18 +381,25 @@ ${evidenceReport}
             subtitle="Highest-confidence response synthesized from majority model alignment and evidence quality."
             className="border-violet-400/40 shadow-[0_0_35px_rgba(139,92,246,0.18)]"
           >
-            <p className="text-lg leading-7 text-slate-100">
-              {isDemoMode
-                ? "Live verification unavailable. Connect provider API keys to generate a final SVA verified answer."
-                : verification?.finalAnswer ?? "No verified answer yet."}
-            </p>
-            <div className="mt-3 flex items-center gap-3 text-sm">
-              <span className="font-semibold text-violet-300">Confidence: {isDemoMode ? "--" : verification?.finalConfidenceScore ?? 0}%</span>
-              <Badge variant="success" className="text-xs">{isDemoMode ? "Live Preview" : verification?.confidenceLabel ?? "Pending"}</Badge>
-            </div>
-            <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-300">
-              <li>{isDemoMode ? "Key takeaways will appear after live provider responses are available." : verification?.reasoning ?? "Key takeaways appear after verification completes."}</li>
-            </ul>
+            {isDemoMode ? (
+              <p className="text-lg leading-7 text-slate-100">Live verification unavailable. Connect provider API keys to generate a final SVA verified answer.</p>
+            ) : structuredAnswer ? (
+              <div className="space-y-4 text-sm">
+                <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <p className="text-xs uppercase tracking-wide text-emerald-200">Quick Verdict</p>
+                  <p className="mt-1 text-slate-100">{structuredAnswer.quickVerdict}</p>
+                  <p className="mt-1 text-emerald-200">{structuredAnswer.finalConfidence}</p>
+                </section>
+                <section><p className="text-xs uppercase tracking-wide text-slate-400">Core Conclusion</p><p className="mt-1 text-slate-200">{structuredAnswer.coreConclusion}</p></section>
+                <section><p className="text-xs uppercase tracking-wide text-slate-400">Evidence Summary</p><p className="mt-1 whitespace-pre-line text-slate-300">{structuredAnswer.supportingEvidence}</p></section>
+                <section className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><p className="text-xs uppercase tracking-wide text-amber-200">Risks & Caveats</p><p className="mt-1 text-amber-100">{structuredAnswer.risks}</p></section>
+                <section><p className="text-xs uppercase tracking-wide text-slate-400">Contradictions</p><p className="mt-1 text-slate-300">{structuredAnswer.contradictions}</p></section>
+                <section><p className="text-xs uppercase tracking-wide text-slate-400">Consensus Summary</p><p className="mt-1 text-slate-300">{structuredAnswer.consensus}</p></section>
+                <section><p className="text-xs uppercase tracking-wide text-slate-400">Why SVA Chose This Answer</p><ul className="mt-1 list-disc space-y-1 pl-5 text-slate-300"><li>High-credibility evidence was prioritized over weaker sources.</li><li>Majority model alignment received heavier weight than outlier claims.</li><li>Contradiction severity and claim support directly adjusted confidence.</li></ul></section>
+              </div>
+            ) : (
+              <p className="text-lg leading-7 text-slate-100">{verification?.finalAnswer ?? "No verified answer yet."}</p>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="primary" type="button" onClick={handleCopyAnswer} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
                 Copy Answer
@@ -409,7 +432,7 @@ ${evidenceReport}
                         </td>
                       </tr>
                     ) : (
-                      (verification?.claimVerifications ?? []).map((row) => (
+                      [...(verification?.claimVerifications ?? [])].sort((a,b)=>b.confidenceScore-a.confidenceScore).map((row) => (
                         <tr key={row.id} className="border-b border-slate-900/80 align-top">
                           <td className="px-2 py-3 text-slate-200">{row.claim}</td>
                           <td className="px-2 py-3">
