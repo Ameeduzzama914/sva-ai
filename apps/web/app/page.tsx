@@ -11,7 +11,7 @@ import { getSession } from "../lib/client-auth";
 export default function HomePage() {
   const [isAuthed, setIsAuthed] = useState(false);
   useEffect(() => setIsAuthed(Boolean(getSession())), []);
-  const ctaHref = isAuthed ? "/app" : "/signup";
+  const ctaHref = isAuthed ? "/app" : "/login";
 
   return (<div className="min-h-screen bg-[#070b14] text-slate-100"><MarketingNav /><main>
     <section className="relative overflow-hidden border-b border-white/10"><div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(139,92,246,0.25),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(56,189,248,0.2),transparent_40%)]" />
