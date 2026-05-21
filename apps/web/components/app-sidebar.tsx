@@ -16,8 +16,15 @@ export const AppSidebar = ({ contradictionCount = 0, isLoggedIn = false, onLogou
   return (
     <aside className="hidden w-[260px] border-r border-slate-800 bg-[#0b1020] p-4 lg:block">
       <div className="mb-8">
-        <Link href="/" className="text-lg font-bold text-white">SVA</Link>
-        <p className="text-xs text-slate-400">Super Verified AI</p>
+        <Link href="/" className="flex items-center gap-3 transition hover:opacity-90">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-500/40 bg-gradient-to-br from-violet-600/35 to-cyan-500/15 text-sm font-bold tracking-tight text-violet-100 shadow-[0_0_20px_rgba(139,92,246,0.2)]">
+            SVA
+          </span>
+          <span>
+            <span className="block text-xl font-bold tracking-tight text-white">SVA</span>
+            <span className="mt-0.5 block text-xs leading-snug text-slate-400">Super Verified AI</span>
+          </span>
+        </Link>
       </div>
       <div className="space-y-6">
         <div><p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ask & Verify</p><div className={sectionClass}><Link href="/app" className={`${itemClass} border border-violet-500/40 bg-violet-500/15 text-violet-200`}>New Query</Link><Link href="/app" className={itemClass}>Dashboard</Link></div></div>

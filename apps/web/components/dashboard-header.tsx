@@ -28,8 +28,8 @@ export const DashboardHeader = ({
     <Card>
       <form onSubmit={onSubmit}>
         <textarea
-          className="h-32 w-full resize-none rounded-xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-violet-400 transition placeholder:text-slate-500 focus:ring-2"
-          placeholder="Ask SVA anything and verify across 5 AI models..."
+          className="h-32 w-full resize-none rounded-xl border border-slate-700/90 bg-slate-950/80 p-4 text-sm leading-relaxed text-slate-100 shadow-inner shadow-black/20 outline-none ring-violet-400/80 transition placeholder:text-sm placeholder:italic placeholder:text-slate-500/90 focus:border-violet-500/40 focus:ring-2 focus:ring-violet-400/30"
+          placeholder="Ask SVA anything and verify across multiple AI models..."
           value={prompt}
           onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onPromptChange(event.target.value)}
           required

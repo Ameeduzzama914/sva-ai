@@ -4,11 +4,12 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { DashboardHeader } from "./dashboard-header";
+import { EvidenceCard, getLinkedClaimsCount } from "./evidence-card";
+import { FeedbackSection } from "./feedback-section";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import {
-  STARTER_PROMPT,
   type EvidenceSnippet,
   type ModelName,
   type ModelResponse,
@@ -29,6 +30,30 @@ const modelBadgeLabel: Record<ModelName, string> = {
   "Research AI": "Gemma 7B"
 };
 
+const modelProviderMeta: Record<
+  ModelName,
+  { brand: string; monogram: string; accent: string; logoBg: string }
+> = {
+  "Fast AI": {
+    brand: "Mistral AI",
+    monogram: "M",
+    accent: "from-orange-500/25 via-amber-600/10 to-slate-950/60 border-orange-500/35",
+    logoBg: "bg-gradient-to-br from-orange-500 to-amber-600 text-white"
+  },
+  "Balanced AI": {
+    brand: "Llama AI",
+    monogram: "L",
+    accent: "from-blue-500/25 via-indigo-600/10 to-slate-950/60 border-blue-500/35",
+    logoBg: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
+  },
+  "Research AI": {
+    brand: "Gemma AI",
+    monogram: "G",
+    accent: "from-emerald-500/25 via-teal-600/10 to-slate-950/60 border-emerald-500/35",
+    logoBg: "bg-gradient-to-br from-emerald-500 to-teal-600 text-white"
+  }
+};
+
 const statusStyle: Record<string, string> = {
   strongly_supported: "bg-emerald-400/25 text-emerald-200 border-emerald-400/40",
   supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
@@ -44,7 +69,7 @@ export const SaasDashboard = () => {
   const router = useRouter();
   const sourceReliabilityLabel = (score: number): "Highly Trusted" | "Trusted" | "Moderate" | "Weak Source" =>
     score >= 90 ? "Highly Trusted" : score >= 75 ? "Trusted" : score >= 55 ? "Moderate" : "Weak Source";
-  const [prompt, setPrompt] = useState(STARTER_PROMPT);
+  const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState<VerificationMode>("deep");
   const [responses, setResponses] = useState<ModelResponse[]>([]);
   const [modelSources, setModelSources] = useState<PerModelSource[]>([]);
@@ -210,7 +235,7 @@ ${evidenceReport}
       <div className="mx-auto flex max-w-[1600px]">
         <AppSidebar contradictionCount={contradictionCount} isLoggedIn={Boolean(session)} remainingToday={usage?.remaining ?? 10} onLogout={() => { logout(); router.push("/login"); }} />
 
-        <main className="flex-1 space-y-4 p-5">
+        <main className="min-w-0 flex-1 space-y-4 p-4 sm:p-5">
           <Card><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="text-slate-300">{session ? `${session.email} · ${session.plan.toUpperCase()} plan` : "Guest session"}</p><div className="flex items-center gap-2">{usage ? <Badge variant={usage.remaining===0?"danger":"success"}>Remaining today: {usage.remaining}/{usage.limit}</Badge> : null}<Button variant="ghost" type="button" onClick={()=>{logout(); router.push("/login");}}>Logout</Button></div></div></Card>
           <DashboardHeader
             prompt={prompt}
@@ -282,6 +307,7 @@ ${evidenceReport}
               {visibleModels.map((model) => {
                 const response = responses.find((item) => item.model === model);
                 const source = sourceMap.get(model);
+                const provider = modelProviderMeta[model];
                 const isSuccess = source?.source === "openrouter";
                 const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
                 const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
@@ -291,18 +317,29 @@ ${evidenceReport}
                 return (
                   <article
                     key={model}
-                    className={`rounded-xl border p-3 sm:p-4 transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-[0_0_28px_rgba(139,92,246,0.18)] ${
-                      !isDemoMode && isMajority ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-700 bg-slate-950/60"
+                    className={`min-w-0 rounded-xl border bg-gradient-to-br p-3 sm:p-4 transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-[0_0_28px_rgba(139,92,246,0.18)] ${
+                      !isDemoMode && isMajority
+                        ? `border-emerald-500/40 ${provider.accent}`
+                        : `border-slate-700 ${provider.accent}`
                     }`}
                   >
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-100">{model}</p>
-                        <Badge variant="violet" className="text-[10px]">{modelBadgeLabel[model]}</Badge>
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-md ${provider.logoBg}`}
+                          aria-hidden
+                        >
+                          {provider.monogram}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-100">{provider.brand}</p>
+                          <p className="text-xs text-slate-400">{model}</p>
+                        </div>
                       </div>
-                      <Badge variant={badgeVariant}>{badgeText}</Badge>
+                      <Badge variant={badgeVariant} className="shrink-0">{badgeText}</Badge>
                     </div>
-                    <p className="text-xs leading-5 text-slate-300">
+                    <Badge variant="violet" className="text-[10px]">{modelBadgeLabel[model]}</Badge>
+                    <p className="mt-2 text-xs leading-5 text-slate-300">
                       {isLoading
                         ? "Verifying response..."
                         : !hasRunVerification
@@ -410,14 +447,14 @@ ${evidenceReport}
             ) : (
               <p className="text-lg leading-7 text-slate-100">{verification?.finalAnswer ?? "No verified answer yet."}</p>
             )}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="primary" type="button" onClick={handleCopyAnswer} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
+            <div className="mt-4 flex flex-wrap gap-2 sm:gap-3">
+              <Button className="min-h-10" variant="primary" type="button" onClick={handleCopyAnswer} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
                 Copy Answer
               </Button>
-              <Button type="button" onClick={handleExportReport} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
+              <Button className="min-h-10" type="button" onClick={handleExportReport} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
                 Export
               </Button>
-              <Button variant="ghost" type="button" onClick={async ()=>{ if(!verification){setActionMessage("Share coming soon."); return;} await navigator.clipboard.writeText(`SVA verified: ${verification.finalAnswer}`); setActionMessage("Share text copied to clipboard."); }} disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>Share</Button>
+              <Button className="min-h-10" variant="ghost" type="button" onClick={async ()=>{ if(!verification){setActionMessage("Share coming soon."); return;} await navigator.clipboard.writeText(`SVA verified: ${verification.finalAnswer}`); setActionMessage("Share text copied to clipboard."); }} disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>Share</Button>
             </div>
           </Card>
 
@@ -458,51 +495,71 @@ ${evidenceReport}
                 </table>
               </div>
             </Card>
-            <Card title="Evidence Panel">
+            <Card title="Evidence Panel" className="lg:col-span-2">
               {isDemoMode ? (
                 <p className="text-xs text-slate-400">
                   Evidence sources will appear after verification.
                 </p>
               ) : evidenceSnippets.length ? (
-                <div className="space-y-3 text-xs">
-                  <p className="text-slate-400">
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-400">
                     Sources retrieved: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
                   </p>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-slate-300">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
                     <p className="font-semibold text-slate-100">Evidence Synthesis</p>
-                    <p className="mt-1">{evidenceGroups.top.length} top-trusted sources, {evidenceGroups.support.length} supporting sources, {evidenceGroups.weak.length} lower-confidence contextual sources.</p>
+                    <p className="mt-1 text-xs sm:text-sm">
+                      {evidenceGroups.top.length} top-trusted · {evidenceGroups.support.length} supporting · {evidenceGroups.weak.length} contextual
+                    </p>
                   </div>
-                  {evidenceGroups.top.map((snippet, idx) => {
-                    const evidenceId = snippet.sourceId ?? snippet.url ?? snippet.title;
-                    const linkedClaims = verification?.claimVerifications.filter((claim) => claim.linkedEvidenceIds?.includes(evidenceId)) ?? [];
-                    return (
-                      <article key={`${snippet.title}-${idx}`} className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3 backdrop-blur-sm transition hover:border-violet-400/50">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-slate-200">{snippet.title}</p>
-                          {snippet.sourceDomain ? <Badge>{snippet.sourceDomain}</Badge> : null}
-                        </div>
-                        <p className="mt-1 text-slate-400">{snippet.text}</p>
-                        <Badge variant="success" className="mt-1">Credibility {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}%</Badge>
-                        <Badge variant="violet" className="ml-2 mt-1">{sourceReliabilityLabel(snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0)}</Badge>
-                        {snippet.trustTier ? (
-                          <Badge variant="indigo" className="ml-2 mt-1">{snippet.trustTier}</Badge>
-                        ) : null}
-                        {snippet.sourceCategory ? (
-                          <Badge variant="cyan" className="ml-2 mt-1">{snippet.sourceCategory}</Badge>
-                        ) : null}
-                        {snippet.url ? (
-                          <a className="mt-1 block text-violet-300" href={snippet.url} target="_blank" rel="noreferrer">
-                            {snippet.url}
-                          </a>
-                        ) : null}
-                        <p className="mt-1 text-slate-500">
-                          Relevance: {snippet.relevanceScore}% · Credibility: {snippet.credibilityScore ?? snippet.sourceQualityScore ?? 0}% · Type: {snippet.sourceClassification ?? "unknown"} · {linkedClaims.length > 0 ? `Linked claims: ${linkedClaims.length}` : "Background source"}
-                        </p>
-                      </article>
-                    );
-                  })}
-                  {evidenceGroups.support.length ? <details className="rounded-lg border border-slate-800 p-2"><summary className="cursor-pointer text-slate-300">Supporting Evidence ({evidenceGroups.support.length})</summary><div className="mt-2 space-y-2">{evidenceGroups.support.map((snippet, idx)=> <article key={`sup-${snippet.title}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2"><p className="font-semibold text-slate-200">{snippet.title}</p><p className="text-slate-400">{snippet.text}</p></article>)}</div></details> : null}
-                  {evidenceGroups.weak.length ? <details className="rounded-lg border border-amber-700/40 p-2"><summary className="cursor-pointer text-amber-300">Lower Confidence / Contextual Sources ({evidenceGroups.weak.length})</summary><div className="mt-2 space-y-2">{evidenceGroups.weak.map((snippet, idx)=> <article key={`weak-${snippet.title}-${idx}`} className="rounded-lg border border-amber-700/30 bg-amber-900/10 p-2"><p className="font-semibold text-amber-100">{snippet.title}</p><p className="text-amber-200/80">{snippet.text}</p></article>)}</div></details> : null}
+                  {evidenceGroups.top.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {evidenceGroups.top.map((snippet, idx) => (
+                        <EvidenceCard
+                          key={`top-${snippet.title}-${idx}`}
+                          snippet={snippet}
+                          linkedClaimsCount={getLinkedClaimsCount(snippet, verification)}
+                          sourceReliabilityLabel={sourceReliabilityLabel}
+                          variant="top"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {evidenceGroups.support.length ? (
+                    <details className="rounded-xl border border-slate-800 p-3">
+                      <summary className="cursor-pointer text-sm text-slate-300">
+                        Supporting Evidence ({evidenceGroups.support.length})
+                      </summary>
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {evidenceGroups.support.map((snippet, idx) => (
+                          <EvidenceCard
+                            key={`sup-${snippet.title}-${idx}`}
+                            snippet={snippet}
+                            linkedClaimsCount={getLinkedClaimsCount(snippet, verification)}
+                            sourceReliabilityLabel={sourceReliabilityLabel}
+                            variant="support"
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                  {evidenceGroups.weak.length ? (
+                    <details className="rounded-xl border border-amber-700/40 p-3">
+                      <summary className="cursor-pointer text-sm text-amber-300">
+                        Lower Confidence / Contextual ({evidenceGroups.weak.length})
+                      </summary>
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {evidenceGroups.weak.map((snippet, idx) => (
+                          <EvidenceCard
+                            key={`weak-${snippet.title}-${idx}`}
+                            snippet={snippet}
+                            linkedClaimsCount={getLinkedClaimsCount(snippet, verification)}
+                            sourceReliabilityLabel={sourceReliabilityLabel}
+                            variant="weak"
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-xs text-slate-400">
@@ -530,6 +587,8 @@ ${evidenceReport}
               </p>
             </Card>
           </div>
+
+          <FeedbackSection />
         </main>
       </div>
     </div>

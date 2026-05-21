@@ -15,7 +15,10 @@ export const MarketingNav = () => {
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#090d18]/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link href="/" className="text-base font-semibold tracking-tight text-white">SVA</Link>
+        <Link href="/" className="flex items-center gap-2.5 transition hover:opacity-90">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-violet-500/40 bg-gradient-to-br from-violet-600/35 to-cyan-500/15 text-xs font-bold text-violet-100">SVA</span>
+          <span className="text-lg font-semibold tracking-tight text-white">SVA</span>
+        </Link>
         <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
           <Link href="/pricing" className="hover:text-white">Pricing</Link>
           <Link href={isLoggedIn ? "/app" : "/login"} className="hover:text-white">Dashboard</Link>
