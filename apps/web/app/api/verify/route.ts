@@ -58,7 +58,8 @@ export async function POST(request: Request) {
       await trackEvent("verification_started", user.userId, { mode });
     }
 
-    const providerFlow = await withTimeout(buildResponsesForPrompt(prompt, mode), 18000);
+    const verificationPlan = user?.plan ?? "free";
+    const providerFlow = await withTimeout(buildResponsesForPrompt(prompt, mode, verificationPlan), 18000);
     const safeEvidenceSnippets = providerFlow.evidenceSnippets;
     const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
     const responseQualityFlag = validResponses.length < 3 ? "low_response_count" : "normal";

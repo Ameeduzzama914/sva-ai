@@ -20,38 +20,27 @@ import {
   type VerificationResult,
   type VerifyApiResponse
 } from "../lib/models";
+import { getModelLayerConfig } from "../lib/model-layer";
 import type { ProviderStatus } from "../lib/server/provider-status";
+import type { UserPlan } from "../lib/server/store";
 import { getSession, getUsage, incrementUsage, logout } from "../lib/client-auth";
 
 const visibleModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
-const modelBadgeLabel: Record<ModelName, string> = {
-  "Fast AI": "Mistral 7B",
-  "Balanced AI": "Llama 3.1 8B",
-  "Research AI": "Gemma 7B"
-};
 
-const modelProviderMeta: Record<
-  ModelName,
-  { brand: string; monogram: string; accent: string; logoBg: string }
-> = {
-  "Fast AI": {
-    brand: "Mistral AI",
-    monogram: "M",
-    accent: "from-orange-500/25 via-amber-600/10 to-slate-950/60 border-orange-500/35",
-    logoBg: "bg-gradient-to-br from-orange-500 to-amber-600 text-white"
-  },
-  "Balanced AI": {
-    brand: "Llama AI",
-    monogram: "L",
-    accent: "from-blue-500/25 via-indigo-600/10 to-slate-950/60 border-blue-500/35",
-    logoBg: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
-  },
-  "Research AI": {
-    brand: "Gemma AI",
-    monogram: "G",
-    accent: "from-emerald-500/25 via-teal-600/10 to-slate-950/60 border-emerald-500/35",
-    logoBg: "bg-gradient-to-br from-emerald-500 to-teal-600 text-white"
+const isLiveModelResponse = (source?: PerModelSource) => source?.fallbackState === "none";
+
+const proProviderConfigured = (model: ModelName, status: ProviderStatus): boolean => {
+  const configured = status.proProvidersConfigured;
+  if (!configured) {
+    return false;
   }
+  if (model === "Fast AI") {
+    return configured.openai;
+  }
+  if (model === "Balanced AI") {
+    return configured.gemini;
+  }
+  return configured.deepseek;
 };
 
 const statusStyle: Record<string, string> = {
@@ -82,8 +71,10 @@ export const SaasDashboard = () => {
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [runtimeProviderStatus, setRuntimeProviderStatus] = useState<Record<ModelName, RuntimeProviderStatus> | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [displayPlan, setDisplayPlan] = useState<UserPlan>("free");
 
   const session = getSession();
+  const modelLayer = useMemo(() => getModelLayerConfig(displayPlan), [displayPlan]);
   const usage = session ? getUsage(session.email) : null;
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
   const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
@@ -122,6 +113,9 @@ export const SaasDashboard = () => {
       setMeta(data.meta);
       setRuntimeProviderStatus(data.providerRuntimeStatus);
       setWarnings(data.warnings ?? []);
+      if (data.usage?.plan) {
+        setDisplayPlan(data.usage.plan);
+      }
       if (session) incrementUsage(session.email);
     } catch {
       setErrorMessage("Verification request failed. Please try again.");
@@ -129,6 +123,23 @@ export const SaasDashboard = () => {
       setIsLoading(false);
     }
   };
+  useEffect(() => {
+    const syncPlan = async () => {
+      try {
+        const response = await fetch("/api/auth/me");
+        const data = (await response.json()) as { ok: boolean; user?: { plan?: UserPlan } | null };
+        if (response.ok && data.user?.plan) {
+          setDisplayPlan(data.user.plan);
+          return;
+        }
+      } catch {
+        /* keep local fallback */
+      }
+      setDisplayPlan(session?.plan ?? "free");
+    };
+    void syncPlan();
+  }, [session?.email, session?.plan]);
+
   useEffect(() => {
     const loadStatus = async () => {
       const response = await fetch("/api/provider-status");
@@ -138,7 +149,7 @@ export const SaasDashboard = () => {
       }
     };
     void loadStatus();
-  }, []);
+  }, [displayPlan]);
 
   const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
   const trustScore = verification?.finalConfidenceScore ?? 0;
@@ -236,7 +247,7 @@ ${evidenceReport}
         <AppSidebar contradictionCount={contradictionCount} isLoggedIn={Boolean(session)} remainingToday={usage?.remaining ?? 10} onLogout={() => { logout(); router.push("/login"); }} />
 
         <main className="min-w-0 flex-1 space-y-4 p-4 sm:p-5">
-          <Card><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="text-slate-300">{session ? `${session.email} · ${session.plan.toUpperCase()} plan` : "Guest session"}</p><div className="flex items-center gap-2">{usage ? <Badge variant={usage.remaining===0?"danger":"success"}>Remaining today: {usage.remaining}/{usage.limit}</Badge> : null}<Button variant="ghost" type="button" onClick={()=>{logout(); router.push("/login");}}>Logout</Button></div></div></Card>
+          <Card><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="text-slate-300">{session ? `${session.email} · ${displayPlan.toUpperCase()} plan` : "Guest session"}</p><div className="flex items-center gap-2">{usage ? <Badge variant={usage.remaining===0?"danger":"success"}>Remaining today: {usage.remaining}/{usage.limit}</Badge> : null}<Button variant="ghost" type="button" onClick={()=>{logout(); router.push("/login");}}>Logout</Button></div></div></Card>
           <DashboardHeader
             prompt={prompt}
             mode={mode}
@@ -272,9 +283,9 @@ ${evidenceReport}
                   : `Live verification enabled — ${liveSuccessCount} of 3 providers returned live responses.`}
               </p>
               <ul className="mt-2 grid gap-1 text-xs text-emerald-100 sm:grid-cols-2">
-                <li>Fast AI: {runtimeProviderStatus ? (runtimeProviderStatus["Fast AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Fast AI"].errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Balanced AI: {runtimeProviderStatus ? (runtimeProviderStatus["Balanced AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Balanced AI"].errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Research AI: {runtimeProviderStatus ? (runtimeProviderStatus["Research AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Research AI"].errorMessage ?? "request failed"}`) : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
+                <li>Fast AI: {runtimeProviderStatus ? (runtimeProviderStatus["Fast AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Fast AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Fast AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
+                <li>Balanced AI: {runtimeProviderStatus ? (runtimeProviderStatus["Balanced AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Balanced AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Balanced AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
+                <li>Research AI: {runtimeProviderStatus ? (runtimeProviderStatus["Research AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Research AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Research AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
                 <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
               </ul>
               {providerStatus.liveProviderCount === 1 ? (
@@ -303,12 +314,15 @@ ${evidenceReport}
           ) : null}
 
           <Card title="Multi-AI Responses" subtitle="Cross-model agreement overview with expandable answers">
+            <div className="mb-4">
+              <Badge variant={modelLayer.id === "pro" ? "indigo" : "neutral"}>{modelLayer.badge}</Badge>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {visibleModels.map((model) => {
                 const response = responses.find((item) => item.model === model);
                 const source = sourceMap.get(model);
-                const provider = modelProviderMeta[model];
-                const isSuccess = source?.source === "openrouter";
+                const provider = modelLayer.providerMeta[model];
+                const isSuccess = isLiveModelResponse(source);
                 const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
                 const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
                 const badgeText = !hasRunVerification ? "Ready" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable";
@@ -338,7 +352,7 @@ ${evidenceReport}
                       </div>
                       <Badge variant={badgeVariant} className="shrink-0">{badgeText}</Badge>
                     </div>
-                    <Badge variant="violet" className="text-[10px]">{modelBadgeLabel[model]}</Badge>
+                    <Badge variant="violet" className="text-[10px]">{provider.badgeLabel}</Badge>
                     <p className="mt-2 text-xs leading-5 text-slate-300">
                       {isLoading
                         ? "Verifying response..."

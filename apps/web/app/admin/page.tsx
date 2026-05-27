@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AdminPlaceholderCards } from "../../components/admin/admin-placeholder-cards";
+import { AdminDashboard } from "../../components/admin/admin-dashboard";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { isAdminEmail } from "../../lib/admin";
@@ -55,10 +55,11 @@ export default function AdminPage() {
     <div className="min-h-screen bg-[#070b14] text-slate-100">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.12),transparent_55%)]" />
       <header className="relative border-b border-slate-800/80 bg-slate-950/50 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6">
           <div>
             <p className="text-xs font-medium uppercase tracking-widest text-violet-300/90">SVA Trust Engine</p>
-            <h1 className="mt-1 text-xl font-semibold text-slate-50 sm:text-2xl">Admin Dashboard</h1>
+            <h1 className="mt-1 text-xl font-semibold text-slate-50 sm:text-2xl">Founder Control Center</h1>
+            <p className="mt-1 text-xs text-slate-400">Private admin — not linked in user navigation</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="violet">Admin</Badge>
@@ -71,11 +72,8 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        <p className="mb-6 text-sm text-slate-400">
-          Private owner console — overview metrics will populate as admin analytics are connected.
-        </p>
-        <AdminPlaceholderCards />
+      <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+        <AdminDashboard />
       </main>
     </div>
   );

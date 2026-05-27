@@ -402,3 +402,207 @@ export const resetCreditsIfNeeded = async (userId: string): Promise<void> => {
     await saveStore(store);
   });
 };
+
+export const resetUserUsage = async (userId: string): Promise<StoredUser | null> =>
+  withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) {
+      return null;
+    }
+    user.usageCount = 0;
+    user.usageByDate = {};
+    user.dailyUsage = 0;
+    user.monthlyUsage = 0;
+    user.creditsRemaining = PLAN_CREDIT_LIMIT[user.plan];
+    user.creditsResetAt = nextResetAt(user.plan);
+    await saveStore(store);
+    return user;
+  });
+
+export type AdminUserRecord = {
+  userId: string;
+  email: string;
+  plan: UserPlan;
+  dailyUsage: number;
+  totalVerifications: number;
+  joinedDate: string;
+  status: "active" | "idle";
+};
+
+export type AdminFeedbackRecord = {
+  id: string;
+  email: string;
+  rating: number | null;
+  comment: string;
+  timestamp: string;
+};
+
+export type AdminVerificationLog = {
+  id: string;
+  email: string;
+  query: string;
+  mode: UserHistoryItem["mode"];
+  modelsUsed: string;
+  trustScore: number;
+  timestamp: string;
+  status: string;
+};
+
+export type AdminOverviewStats = {
+  totalUsers: number;
+  newUsersToday: number;
+  totalVerifications: number;
+  verificationsToday: number;
+  freeUsers: number;
+  proUsers: number;
+  ultraUsers: number;
+  feedbackCount: number;
+  systemHealth: "healthy" | "warning" | "issue";
+  dataSource: "live" | "empty";
+};
+
+const planToModelsLabel = (plan: UserPlan): string => {
+  if (plan === "pro" || plan === "plus") {
+    return "GPT, Gemini, DeepSeek";
+  }
+  return "Mistral, Llama, Gemma";
+};
+
+export const getAdminOverviewStats = async (): Promise<AdminOverviewStats> => {
+  const { fetchAdminOverviewFromSupabase, isSupabaseAdminConfigured } = await import("./supabase-admin");
+  if (isSupabaseAdminConfigured()) {
+    const fromSupabase = await fetchAdminOverviewFromSupabase();
+    if (fromSupabase) {
+      return fromSupabase;
+    }
+  }
+
+  const store = await readStore();
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (store.users.length === 0 && store.analytics.length === 0) {
+    return {
+      totalUsers: 0,
+      newUsersToday: 0,
+      totalVerifications: 0,
+      verificationsToday: 0,
+      freeUsers: 0,
+      proUsers: 0,
+      ultraUsers: 0,
+      feedbackCount: 0,
+      systemHealth: "warning",
+      dataSource: "empty"
+    };
+  }
+
+  const totalVerifications = store.users.reduce((sum, user) => sum + user.usageCount, 0);
+  const verificationsToday = store.users.reduce((sum, user) => sum + (user.usageByDate[today] ?? 0), 0);
+  const verificationEventsToday = store.analytics.filter(
+    (event) => event.event === "verification_completed" && event.timestamp.startsWith(today)
+  ).length;
+
+  const configuredProviders = [
+    Boolean(process.env.OPENROUTER_API_KEY),
+    Boolean(process.env.OPENAI_API_KEY),
+    Boolean(process.env.GEMINI_API_KEY),
+    Boolean(process.env.DEEPSEEK_API_KEY),
+    Boolean(process.env.TAVILY_API_KEY || process.env.SERPER_API_KEY || process.env.WEB_RETRIEVAL_API_KEY)
+  ];
+  const configuredCount = configuredProviders.filter(Boolean).length;
+  const systemHealth: AdminOverviewStats["systemHealth"] =
+    configuredCount >= 4 ? "healthy" : configuredCount >= 2 ? "warning" : "issue";
+
+  return {
+    totalUsers: store.users.length,
+    newUsersToday: store.users.filter((user) => user.createdAt.startsWith(today)).length,
+    totalVerifications,
+    verificationsToday: Math.max(verificationsToday, verificationEventsToday),
+    freeUsers: store.users.filter((user) => user.plan === "free").length,
+    proUsers: store.users.filter((user) => user.plan === "pro").length,
+    ultraUsers: store.users.filter((user) => user.plan === "plus").length,
+    feedbackCount: store.analytics.filter((event) => event.event === "feedback_submitted").length,
+    systemHealth,
+    dataSource: "live"
+  };
+};
+
+export const listAdminUsers = async (): Promise<AdminUserRecord[]> => {
+  const { fetchAdminUsersFromSupabase, isSupabaseAdminConfigured } = await import("./supabase-admin");
+  if (isSupabaseAdminConfigured()) {
+    const fromSupabase = await fetchAdminUsersFromSupabase();
+    if (fromSupabase) {
+      return fromSupabase;
+    }
+  }
+
+  const store = await readStore();
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  return store.users
+    .map((user) => {
+      const lastActivity = user.history[0]?.timestamp ?? user.createdAt;
+      return {
+        userId: user.userId,
+        email: user.email,
+        plan: user.plan,
+        dailyUsage: getUsageForToday(user),
+        totalVerifications: user.usageCount,
+        joinedDate: user.createdAt,
+        status: new Date(lastActivity).getTime() >= weekAgo ? "active" : "idle"
+      } satisfies AdminUserRecord;
+    })
+    .sort((a, b) => b.joinedDate.localeCompare(a.joinedDate));
+};
+
+export const listAdminFeedback = async (): Promise<AdminFeedbackRecord[]> => {
+  const { fetchAdminFeedbackFromSupabase, isSupabaseAdminConfigured } = await import("./supabase-admin");
+  if (isSupabaseAdminConfigured()) {
+    const fromSupabase = await fetchAdminFeedbackFromSupabase();
+    if (fromSupabase) {
+      return fromSupabase;
+    }
+  }
+
+  const store = await readStore();
+  const userEmailById = new Map(store.users.map((user) => [user.userId, user.email]));
+
+  return store.analytics
+    .filter((event) => event.event === "feedback_submitted")
+    .map((event) => ({
+      id: event.id,
+      email: event.userId ? (userEmailById.get(event.userId) ?? "Unknown user") : "Anonymous",
+      rating: typeof event.metadata?.rating === "number" ? event.metadata.rating : null,
+      comment: String(event.metadata?.feedback ?? event.metadata?.comment ?? "").trim(),
+      timestamp: event.timestamp
+    }))
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+};
+
+export const listAdminVerificationLogs = async (): Promise<AdminVerificationLog[]> => {
+  const { fetchAdminLogsFromSupabase, isSupabaseAdminConfigured } = await import("./supabase-admin");
+  if (isSupabaseAdminConfigured()) {
+    const fromSupabase = await fetchAdminLogsFromSupabase();
+    if (fromSupabase) {
+      return fromSupabase;
+    }
+  }
+
+  const store = await readStore();
+
+  return store.users
+    .flatMap((user) =>
+      user.history.map((item, index) => ({
+        id: `${user.userId}-${item.timestamp}-${index}`,
+        email: user.email,
+        query: item.prompt,
+        mode: item.mode,
+        modelsUsed: planToModelsLabel(user.plan),
+        trustScore: item.confidence,
+        timestamp: item.timestamp,
+        status: item.success === false ? "failed" : item.verdict
+      }))
+    )
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, 100);
+};

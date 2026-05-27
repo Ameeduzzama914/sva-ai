@@ -1,4 +1,7 @@
+import { usesProModelLayer } from "./model-layer";
+import { buildProLayerResponses } from "./providers/pro-layer";
 import { callOpenRouter, OPENROUTER_MODELS } from "./providers/openrouter";
+import type { UserPlan } from "./server/store";
 import {
   type ClaimVerification,
   type EvidenceSnippet,
@@ -896,7 +899,8 @@ const buildFocusedRetrievalQueries = (prompt: string): string[] => {
 
 export const buildResponsesForPrompt = async (
   prompt: string,
-  mode: VerificationMode = "fast"
+  mode: VerificationMode = "fast",
+  plan: UserPlan = "free"
 ): Promise<{
   responses: ModelResponse[];
   modelSources: PerModelSource[];
@@ -916,6 +920,22 @@ export const buildResponsesForPrompt = async (
     return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
   });
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
+
+  if (usesProModelLayer(plan)) {
+    const proFlow = await buildProLayerResponses({
+      contextPrompt,
+      evidenceSnippets,
+      retrievalModeUsed,
+      mode
+    });
+    return {
+      ...proFlow,
+      meta: {
+        ...proFlow.meta,
+        modelLayer: "pro"
+      }
+    };
+  }
 
   const MODELS = OPENROUTER_MODELS.map((slot) => {
     const primaryModel = process.env[slot.envKey]?.trim();
@@ -1021,6 +1041,7 @@ export const buildResponsesForPrompt = async (
     meta: {
       mode: "openrouter",
       modeUsed: mode,
+      modelLayer: "free",
       modelASource: "openrouter",
       modelBSource: "openrouter",
       modelCSource: "openrouter",
