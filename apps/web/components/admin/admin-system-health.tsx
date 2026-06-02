@@ -1,4 +1,5 @@
 import type { AdminHealthPayload, AdminHealthStatus } from "../../lib/admin-types";
+import { ProviderLogo } from "../provider-logo";
 import { AdminSection } from "./admin-section";
 
 type AdminSystemHealthProps = {
@@ -29,7 +30,10 @@ export const AdminSystemHealth = ({ health }: AdminSystemHealthProps) => (
             className="rounded-xl border border-slate-800/80 bg-slate-950/50 p-3"
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium text-slate-100">{provider.name}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <ProviderLogo provider={provider.name} size="sm" />
+                <p className="truncate text-sm font-medium text-slate-100">{provider.name}</p>
+              </div>
               <span
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase ${statusStyles[provider.status]}`}
               >

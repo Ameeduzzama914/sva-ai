@@ -16,6 +16,7 @@ type ProSlot = {
   envKey: "PRO_OPENROUTER_MODEL_A" | "PRO_OPENROUTER_MODEL_B" | "PRO_OPENROUTER_MODEL_C";
   fallbackChain: readonly string[];
   defaultModelId: string;
+  maxTokens?: number;
   envConfigured: () => boolean;
 };
 
@@ -30,8 +31,9 @@ const PRO_SLOTS: ProSlot[] = [
   {
     slot: "Balanced AI",
     envKey: "PRO_OPENROUTER_MODEL_B",
-    fallbackChain: ["google/gemini-2.0-flash-001", "google/gemini-flash-1.5"],
-    defaultModelId: "google/gemini-2.0-flash-001",
+    fallbackChain: ["google/gemini-2.5-flash", "~google/gemini-flash-latest"],
+    defaultModelId: "google/gemini-2.5-flash",
+    maxTokens: 2048,
     envConfigured: () => Boolean(process.env.PRO_OPENROUTER_MODEL_B)
   },
   {
@@ -80,7 +82,7 @@ export const buildProLayerResponses = async ({
       let lastFailure: ProResult | undefined;
 
       for (const modelId of modelSequence) {
-        const result = await callOpenRouter(modelId, contextPrompt);
+        const result = await callOpenRouter(modelId, contextPrompt, slot.maxTokens ? { maxTokens: slot.maxTokens } : undefined);
         if (result.ok) {
           return result;
         }

@@ -368,7 +368,7 @@ export const clearUserHistory = async (userId: string): Promise<void> => {
     await saveStore(store);
   });
 };
-const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: 15, pro: 150, plus: 500 };
+const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: 15, pro: 50, plus: 500 };
 export const getMonthlyCreditLimit = (plan: UserPlan): number => (plan === "free" ? 0 : PLAN_CREDIT_LIMIT[plan]);
 export const getPlanCreditLimit = (plan: UserPlan): number => PLAN_CREDIT_LIMIT[plan];
 export const getVerificationCreditCost = (mode: "fast" | "deep" | "research"): number => (mode === "research" ? 5 : mode === "deep" ? 3 : 1);

@@ -12,6 +12,7 @@ import {
   type VerifyApiResponse,
   type ModelName
 } from "../lib/models";
+import { ProviderLogo } from "./provider-logo";
 import { Badge } from "./ui/badge";
 
 type HistoryItem = {
@@ -289,7 +290,8 @@ export const ChatLayout = () => {
             <div className="row-space">
               <div className="chip-row">
                 {visibleResponseModels.map((chip) => (
-                  <span className="chip" key={chip}>
+                  <span className="chip flex items-center gap-2" key={chip}>
+                    <ProviderLogo provider={modelBadgeLabel[chip]} size="sm" />
                     {chip}
                   </span>
                 ))}
@@ -370,6 +372,7 @@ export const ChatLayout = () => {
                 <article className="response-card" key={modelName}>
                   <div className="row-space">
                     <div className="flex items-center gap-2">
+                      <ProviderLogo provider={modelBadgeLabel[modelName]} size="sm" />
                       <strong>{modelName}</strong>
                       <Badge variant="violet" className="text-[10px]">{modelBadgeLabel[modelName]}</Badge>
                     </div>

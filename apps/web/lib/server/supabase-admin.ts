@@ -4,6 +4,7 @@ import type {
   AdminOverviewStats,
   AdminUserRecord,
   AdminVerificationLog,
+  PublicUser,
   UserPlan
 } from "./store";
 
@@ -94,6 +95,96 @@ const mapUserRow = (row: Row): AdminUserRecord | null => {
     joinedDate: joinedDate || new Date().toISOString(),
     status
   };
+};
+
+const toIsoString = (value: string): string => {
+  if (!value) {
+    return new Date().toISOString();
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+};
+
+const nextResetAt = (plan: UserPlan): string => {
+  const now = new Date();
+  if (plan === "free") {
+    const next = new Date(now);
+    next.setUTCHours(24, 0, 0, 0);
+    return next.toISOString();
+  }
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)).toISOString();
+};
+
+const planCreditLimit = (plan: UserPlan): number => (plan === "free" ? 15 : plan === "pro" ? 50 : 500);
+
+const mapPublicUserRow = (row: Row): PublicUser | null => {
+  const email = pickString(row, ["email"]).trim().toLowerCase();
+  if (!email) {
+    return null;
+  }
+
+  const planRaw = pickString(row, ["plan"]) || "free";
+  const plan = isUserPlan(planRaw) ? planRaw : "free";
+  const userId = pickString(row, ["user_id", "userId", "id"]) || email;
+  const usedToday = pickNumber(row, ["daily_usage", "dailyUsage", "usage_today"]);
+
+  return {
+    userId,
+    email,
+    plan,
+    usageCount: pickNumber(row, ["usage_count", "usageCount", "total_verifications", "totalVerifications"]),
+    createdAt: toIsoString(pickString(row, ["created_at", "createdAt", "joined_date", "joinedDate"])),
+    usedToday,
+    dailyLimit: plan === "free" ? 15 : 0,
+    onboardingCompleted: Boolean(row.onboarding_completed ?? row.onboardingCompleted),
+    creditsRemaining: pickNumber(row, ["credits_remaining", "creditsRemaining"], planCreditLimit(plan)),
+    creditsResetAt: toIsoString(pickString(row, ["credits_reset_at", "creditsResetAt"]) || nextResetAt(plan)),
+    monthlyUsage: pickNumber(row, ["monthly_usage", "monthlyUsage"]),
+    dailyUsage: usedToday
+  };
+};
+
+export const fetchPublicUserByEmailFromSupabase = async (email: string): Promise<PublicUser | null> => {
+  const client = getSupabaseAdminClient();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!client || !normalizedEmail) {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from("sva_users")
+    .select("*")
+    .ilike("email", normalizedEmail)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[supabase-admin] user by email:", error.message);
+    return null;
+  }
+
+  return data ? mapPublicUserRow(data as Row) : null;
+};
+
+export const updateSupabaseUserPlanByEmail = async (email: string, plan: UserPlan): Promise<PublicUser | null> => {
+  const client = getSupabaseAdminClient();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!client || !normalizedEmail) {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from("sva_users")
+    .update({ plan })
+    .ilike("email", normalizedEmail)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[supabase-admin] update plan:", error.message);
+    return null;
+  }
+
+  return data ? mapPublicUserRow(data as Row) : null;
 };
 
 const mapFeedbackRow = (row: Row): AdminFeedbackRecord | null => {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { type VerificationMode, type VerificationUsageSummary, type VerifyApiError, type VerifyApiSuccess } from "../../../lib/models";
 import { getAuthenticatedUser } from "../../../lib/server/auth";
-import { appendHistoryForUser, consumeVerificationCredits, getDailyLimit, trackEvent } from "../../../lib/server/store";
+import { appendHistoryForUser, consumeVerificationCredits, getDailyLimit, getVerificationCreditCost, trackEvent, type PublicUser } from "../../../lib/server/store";
 import { buildResponsesForPrompt, verifyResponses } from "../../../lib/verifier";
 
 interface VerifyRequestBody {
@@ -25,8 +25,22 @@ const withTimeout = async <T>(promise: Promise<T>, ms = 18000): Promise<T> => {
   }
 };
 
+const consumeResolvedSessionCredits = (
+  user: PublicUser,
+  mode: VerificationMode
+): { ok: true; creditsRemaining: number; creditsUsed: number; plan: PublicUser["plan"] } | { ok: false; creditsRemaining: number; creditsUsed: number; plan: PublicUser["plan"] } => {
+  const creditsUsed = getVerificationCreditCost(mode);
+  const creditsRemaining = user.creditsRemaining;
+
+  if (creditsRemaining < creditsUsed) {
+    return { ok: false, creditsRemaining, creditsUsed, plan: user.plan };
+  }
+
+  return { ok: true, creditsRemaining: creditsRemaining - creditsUsed, creditsUsed, plan: user.plan };
+};
+
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser();
+  const user = await getAuthenticatedUser(request);
 
   let body: VerifyRequestBody;
 
@@ -107,10 +121,7 @@ export async function POST(request: Request) {
     let creditsUsed = 0;
     let creditsRemaining = user?.creditsRemaining ?? 0;
     if (user) {
-      const creditResult = await consumeVerificationCredits(user.userId, mode);
-      if (!creditResult) {
-        return NextResponse.json({ ok: false, message: "User session not found." } as VerifyApiError, { status: 401 });
-      }
+      const creditResult = (await consumeVerificationCredits(user.userId, mode)) ?? consumeResolvedSessionCredits(user, mode);
       if (!creditResult.ok) {
         return NextResponse.json(
           {

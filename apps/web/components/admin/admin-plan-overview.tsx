@@ -1,3 +1,4 @@
+import { ProviderLogo } from "../provider-logo";
 import { Badge } from "../ui/badge";
 import { AdminSection } from "./admin-section";
 
@@ -33,7 +34,10 @@ export const AdminPlanOverview = () => (
           <Badge variant={plan.variant}>{plan.name}</Badge>
           <ul className="mt-3 space-y-2 text-sm text-slate-300">
             {plan.models.map((model) => (
-              <li key={model}>• {model}</li>
+              <li key={model} className="flex items-center gap-2">
+                <ProviderLogo provider={model} size="sm" />
+                <span>• {model}</span>
+              </li>
             ))}
             <li className="text-xs text-slate-400">• {plan.limit}</li>
           </ul>

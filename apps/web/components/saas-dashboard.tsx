@@ -9,6 +9,7 @@ import { FeedbackSection } from "./feedback-section";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { ProviderLogo } from "./provider-logo";
 import {
   type EvidenceSnippet,
   type ModelName,
@@ -23,7 +24,7 @@ import {
 import { getModelLayerConfig } from "../lib/model-layer";
 import type { ProviderStatus } from "../lib/server/provider-status";
 import type { UserPlan } from "../lib/server/store";
-import { getSession, getUsage, incrementUsage, logout } from "../lib/client-auth";
+import { getSession, getSessionHeaders, getUsage, incrementUsage, logout, setSession } from "../lib/client-auth";
 
 const visibleModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
 
@@ -75,7 +76,7 @@ export const SaasDashboard = () => {
 
   const session = getSession();
   const modelLayer = useMemo(() => getModelLayerConfig(displayPlan), [displayPlan]);
-  const usage = session ? getUsage(session.email) : null;
+  const usage = session ? getUsage(session.email, displayPlan) : null;
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
   const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
   const liveSuccessCount = runtimeProviderStatus ? Object.values(runtimeProviderStatus).filter((item) => item.liveSuccess).length : null;
@@ -97,7 +98,7 @@ export const SaasDashboard = () => {
     try {
       const response = await fetch("/api/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getSessionHeaders() },
         body: JSON.stringify({ prompt, mode })
       });
       const data = (await response.json()) as VerifyApiResponse;
@@ -126,10 +127,13 @@ export const SaasDashboard = () => {
   useEffect(() => {
     const syncPlan = async () => {
       try {
-        const response = await fetch("/api/auth/me");
+        const response = await fetch("/api/auth/me", { headers: getSessionHeaders() });
         const data = (await response.json()) as { ok: boolean; user?: { plan?: UserPlan } | null };
         if (response.ok && data.user?.plan) {
           setDisplayPlan(data.user.plan);
+          if (session) {
+            setSession({ ...session, plan: data.user.plan });
+          }
           return;
         }
       } catch {
@@ -142,7 +146,7 @@ export const SaasDashboard = () => {
 
   useEffect(() => {
     const loadStatus = async () => {
-      const response = await fetch("/api/provider-status");
+      const response = await fetch("/api/provider-status", { headers: getSessionHeaders() });
       const data = (await response.json()) as { ok: boolean; status?: ProviderStatus };
       if (response.ok && data.ok && data.status) {
         setProviderStatus(data.status);
@@ -282,10 +286,19 @@ ${evidenceReport}
                   ? `Configured for live verification — ${providerStatus.liveProviderCount} of 3 providers have API keys.`
                   : `Live verification enabled — ${liveSuccessCount} of 3 providers returned live responses.`}
               </p>
-              <ul className="mt-2 grid gap-1 text-xs text-emerald-100 sm:grid-cols-2">
-                <li>Fast AI: {runtimeProviderStatus ? (runtimeProviderStatus["Fast AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Fast AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Fast AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Balanced AI: {runtimeProviderStatus ? (runtimeProviderStatus["Balanced AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Balanced AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Balanced AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
-                <li>Research AI: {runtimeProviderStatus ? (runtimeProviderStatus["Research AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Research AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Research AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</li>
+              <ul className="mt-2 grid gap-2 text-xs text-emerald-100 sm:grid-cols-2">
+                <li className="flex min-w-0 items-center gap-2">
+                  <ProviderLogo provider={modelLayer.providerMeta["Fast AI"].logoProvider} size="sm" />
+                  <span className="min-w-0"><span className="font-medium">{modelLayer.providerMeta["Fast AI"].brand}</span> / Fast AI: {runtimeProviderStatus ? (runtimeProviderStatus["Fast AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Fast AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Fast AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</span>
+                </li>
+                <li className="flex min-w-0 items-center gap-2">
+                  <ProviderLogo provider={modelLayer.providerMeta["Balanced AI"].logoProvider} size="sm" />
+                  <span className="min-w-0"><span className="font-medium">{modelLayer.providerMeta["Balanced AI"].brand}</span> / Balanced AI: {runtimeProviderStatus ? (runtimeProviderStatus["Balanced AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Balanced AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Balanced AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</span>
+                </li>
+                <li className="flex min-w-0 items-center gap-2">
+                  <ProviderLogo provider={modelLayer.providerMeta["Research AI"].logoProvider} size="sm" />
+                  <span className="min-w-0"><span className="font-medium">{modelLayer.providerMeta["Research AI"].brand}</span> / Research AI: {runtimeProviderStatus ? (runtimeProviderStatus["Research AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Research AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Research AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</span>
+                </li>
                 <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
               </ul>
               {providerStatus.liveProviderCount === 1 ? (
@@ -339,12 +352,16 @@ ${evidenceReport}
                   >
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-3">
-                        <span
-                          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-md ${provider.logoBg}`}
-                          aria-hidden
-                        >
-                          {provider.monogram}
-                        </span>
+                        {provider.logoProvider ? (
+                          <ProviderLogo provider={provider.logoProvider} size="lg" className="rounded-xl" />
+                        ) : (
+                          <span
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-md ${provider.logoBg}`}
+                            aria-hidden
+                          >
+                            {provider.monogram}
+                          </span>
+                        )}
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-100">{provider.brand}</p>
                           <p className="text-xs text-slate-400">{model}</p>

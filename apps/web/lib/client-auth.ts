@@ -18,6 +18,10 @@ export const getSession = (): ClientSession | null => {
 
 export const setSession = (session: ClientSession) => localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 export const logout = () => localStorage.removeItem(SESSION_KEY);
+export const getSessionHeaders = (): Record<string, string> => {
+  const session = getSession();
+  return session?.email ? { "x-sva-session-email": session.email } : {};
+};
 
 export const setPlanIntent = (plan: "free" | "pro" | "plus") => localStorage.setItem(PLAN_INTENT_KEY, plan);
 export const getPlanIntent = (): "free" | "pro" | "plus" | null => (localStorage.getItem(PLAN_INTENT_KEY) as "free" | "pro" | "plus" | null);
@@ -37,10 +41,13 @@ export const loginUser = (email: string, password: string): { ok: boolean; plan?
   return user ? { ok: true, plan: user.plan } : { ok: false, message: "Invalid email or password." };
 };
 
-export const getUsage = (email: string) => {
+const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ? 10 : plan === "pro" ? 50 : 500);
+
+export const getUsage = (email: string, plan: ClientSession["plan"] = "free") => {
   const key = `${USAGE_KEY}_${email.toLowerCase()}_${new Date().toISOString().slice(0, 10)}`;
   const used = Number(localStorage.getItem(key) ?? "0");
-  return { used, limit: 10, remaining: Math.max(0, 10 - used), key };
+  const limit = getPlanLimit(plan);
+  return { used, limit, remaining: Math.max(0, limit - used), key };
 };
 
 export const incrementUsage = (email: string) => {

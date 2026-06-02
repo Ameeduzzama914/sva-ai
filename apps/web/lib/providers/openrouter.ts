@@ -20,13 +20,46 @@ export const OPENROUTER_MODELS = [
 
 export type OpenRouterResult =
   | { ok: true; text: string; providerModelId: string }
-  | { ok: false; message: string; reason: "not_configured" | "provider_error"; statusCode?: number; providerModelId?: string };
+  | { ok: false; message: string; reason: "not_configured" | "provider_error"; statusCode?: number; providerModelId?: string; providerError?: string };
+
+type OpenRouterOptions = {
+  maxTokens?: number;
+};
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function callOpenRouter(modelId: string, prompt: string): Promise<OpenRouterResult> {
+const readResponseBody = async (response: Response): Promise<{ raw: string; parsed: unknown }> => {
+  const raw = await response.text();
+  if (!raw.trim()) {
+    return { raw, parsed: undefined };
+  }
+
+  try {
+    return { raw, parsed: JSON.parse(raw) as unknown };
+  } catch {
+    return { raw, parsed: undefined };
+  }
+};
+
+const extractProviderError = (payload: unknown, raw: string): string | undefined => {
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const error = (payload as { error?: { message?: unknown } }).error;
+    if (typeof error?.message === "string" && error.message.trim()) {
+      return error.message.trim();
+    }
+  }
+
+  return raw.trim() || undefined;
+};
+
+const logOpenRouterFailure = (event: string, details: Record<string, unknown>) => {
+  console.error(`[OpenRouter] ${event}`, details);
+};
+
+export async function callOpenRouter(modelId: string, prompt: string, options: OpenRouterOptions = {}): Promise<OpenRouterResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
+    logOpenRouterFailure("request skipped: missing API key", { modelId });
     return { ok: false, message: "AI model request failed.", reason: "not_configured", providerModelId: modelId };
   }
 
@@ -37,7 +70,12 @@ export async function callOpenRouter(modelId: string, prompt: string): Promise<O
       return await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {"Content-Type": "application/json", Authorization: `Bearer ${apiKey}`},
-        body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+          ...(options.maxTokens ? { max_tokens: options.maxTokens } : {})
+        }),
         signal: controller.signal
       });
     } finally {
@@ -53,34 +91,67 @@ export async function callOpenRouter(modelId: string, prompt: string): Promise<O
     }
 
     if (!response.ok) {
+      const { raw, parsed } = await readResponseBody(response);
+      const providerError = extractProviderError(parsed, raw);
+      logOpenRouterFailure("request failed", {
+        modelId,
+        statusCode: response.status,
+        statusText: response.statusText,
+        providerError,
+        responseBody: raw.slice(0, 2000)
+      });
       return {
         ok: false,
         message: response.status === 429 ? "AI model temporarily rate-limited. Please retry." : "AI model request failed.",
         reason: "provider_error",
         statusCode: response.status,
-        providerModelId: modelId
+        providerModelId: modelId,
+        providerError
       };
     }
 
-    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const { raw, parsed } = await readResponseBody(response);
+    const data = parsed as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text) {
-      return { ok: false, message: "AI model request failed.", reason: "provider_error", providerModelId: modelId };
+      logOpenRouterFailure("response parsing failed", {
+        modelId,
+        statusCode: response.status,
+        responseBody: raw.slice(0, 2000)
+      });
+      return { ok: false, message: "AI model request failed.", reason: "provider_error", statusCode: response.status, providerModelId: modelId };
     }
 
     return { ok: true, text, providerModelId: modelId };
   } catch (error) {
-    console.error("AI model request exception", { modelId, message: error instanceof Error ? error.message : String(error) });
+    logOpenRouterFailure("request exception", { modelId, message: error instanceof Error ? error.message : String(error) });
     await delay(500);
     try {
       const retry = await requestOnce();
       if (retry.ok) {
-        const data = (await retry.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const { raw, parsed } = await readResponseBody(retry);
+        const data = parsed as { choices?: Array<{ message?: { content?: string } }> };
         const text = data.choices?.[0]?.message?.content?.trim();
         if (text) return { ok: true, text, providerModelId: modelId };
+        logOpenRouterFailure("retry response parsing failed", {
+          modelId,
+          statusCode: retry.status,
+          responseBody: raw.slice(0, 2000)
+        });
+        return { ok: false, message: "AI model request failed.", reason: "provider_error", statusCode: retry.status, providerModelId: modelId };
       }
-      return { ok: false, message: "AI model request failed.", reason: "provider_error", statusCode: retry.status, providerModelId: modelId };
-    } catch {
+      const { raw, parsed } = await readResponseBody(retry);
+      const providerError = extractProviderError(parsed, raw);
+      logOpenRouterFailure("retry request failed", {
+        modelId,
+        statusCode: retry.status,
+        statusText: retry.statusText,
+        providerError,
+        responseBody: raw.slice(0, 2000)
+      });
+      return { ok: false, message: "AI model request failed.", reason: "provider_error", statusCode: retry.status, providerModelId: modelId, providerError };
+    } catch (retryError) {
+      logOpenRouterFailure("retry exception", { modelId, message: retryError instanceof Error ? retryError.message : String(retryError) });
       return { ok: false, message: "AI model request failed.", reason: "provider_error", providerModelId: modelId };
     }
   }

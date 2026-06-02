@@ -1,4 +1,142 @@
 {
   "users": [],
-  "analytics": []
+  "analytics": [
+    {
+      "id": "116a43da-bb6f-4615-b8cc-9a6d453995d5",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-02T14:33:21.199Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 77,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "5ffd48ac-584e-49d1-a751-f57ac004ffaa",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-02T14:33:10.614Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "186315fe-a5e9-450a-9995-b74ad86d1d2c",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-02T14:01:53.836Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 73,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "fb01a502-c8d6-49fb-a000-bd4b5d6f3a2e",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-02T14:01:42.369Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "ddce9867-290b-4b58-bd6e-54e7327e1d9f",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-02T13:35:41.537Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 79,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "8cdbcca8-d9cd-4a76-8c7d-ea7b80d9cb9a",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-02T13:35:25.500Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "15ce72fc-ba2e-484d-8cd3-8bcc63c5270d",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-05-31T13:57:50.779Z",
+      "metadata": {
+        "plan": "pro",
+        "mode": "test_dev"
+      }
+    },
+    {
+      "id": "5acb3eb6-a103-438f-9419-53d6a20549cf",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-05-31T09:25:29.409Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 72,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "a964a3f4-16b6-48f8-b35f-5780259093e6",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-05-31T09:25:18.862Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "4aeace62-e3fe-4654-83eb-4d15b5dd4e5a",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-05-31T08:50:18.759Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "d7c6fa66-52ad-45bb-b28c-3746b1d09a7b",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-05-31T08:50:01.707Z",
+      "metadata": {
+        "plan": "pro",
+        "mode": "test_dev"
+      }
+    },
+    {
+      "id": "820a96b7-5e1a-49a3-94c4-8f531060a686",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-05-31T08:37:43.518Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "d2ae424d-9e82-4b17-89de-20eeae4c28e6",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-05-31T08:37:21.890Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "3b909666-e60b-49ab-9922-7226d7992ffd",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-05-31T08:37:06.749Z",
+      "metadata": {
+        "plan": "pro",
+        "mode": "test_dev"
+      }
+    }
+  ]
 }
