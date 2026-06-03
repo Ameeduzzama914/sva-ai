@@ -12,13 +12,13 @@ const plans = [
   {
     name: "Pro",
     models: ["GPT", "Gemini", "DeepSeek"],
-    limit: "Higher daily limit (150 monthly credits)",
+    limit: "Higher daily limit (50 verifications/day)",
     variant: "indigo" as const
   },
   {
     name: "Ultra",
-    models: ["GPT", "Gemini", "DeepSeek", "Future premium model layer"],
-    limit: "Highest daily limit (500 monthly credits)",
+    models: ["GPT", "Gemini", "DeepSeek"],
+    limit: "Highest daily limit (150 verifications/day)",
     variant: "violet" as const
   }
 ];

@@ -2,6 +2,66 @@
   "users": [],
   "analytics": [
     {
+      "id": "1f1983fb-f5b7-4722-8119-dbb4d4190fe5",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-03T13:10:59.567Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 72,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "d4452232-a636-4b66-844b-d758449741ed",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-03T13:10:53.550Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "10d8b979-614d-4a6a-898f-06b4af5c967d",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-06-03T13:10:47.217Z",
+      "metadata": {
+        "plan": "pro",
+        "mode": "test_dev"
+      }
+    },
+    {
+      "id": "d21b02ed-773c-48b3-82aa-ba22ec56b852",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-03T13:09:16.232Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 72,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "80fdac1f-f36a-4663-a945-5a574a0e5bac",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-03T13:09:08.695Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "82ccea2d-2a7f-4a9c-bf4f-99a54ec80879",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-06-03T13:08:37.492Z",
+      "metadata": {
+        "plan": "ultra",
+        "mode": "test_dev"
+      }
+    },
+    {
       "id": "116a43da-bb6f-4615-b8cc-9a6d453995d5",
       "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
       "event": "verification_completed",

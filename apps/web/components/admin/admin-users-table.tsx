@@ -84,7 +84,7 @@ export const AdminUsersTable = ({ initialUsers, canManagePlans, onRefresh }: Adm
           <option value="all">All plans</option>
           <option value="free">Free</option>
           <option value="pro">Pro</option>
-          <option value="plus">Ultra</option>
+          <option value="ultra">Ultra</option>
         </select>
       </div>
 
@@ -128,7 +128,7 @@ export const AdminUsersTable = ({ initialUsers, canManagePlans, onRefresh }: Adm
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex min-w-[280px] flex-wrap gap-1">
-                      {(["free", "pro", "plus"] as UserPlan[]).map((plan) => (
+                      {(["free", "pro", "ultra"] as UserPlan[]).map((plan) => (
                         <Button
                           key={plan}
                           variant="ghost"
@@ -136,7 +136,7 @@ export const AdminUsersTable = ({ initialUsers, canManagePlans, onRefresh }: Adm
                           disabled={!canManagePlans || busyUserId === user.userId}
                           onClick={() => runAction(user.userId, () => updateAdminUserPlan(user.userId, plan))}
                         >
-                          Set {plan === "plus" ? "Ultra" : plan === "pro" ? "Pro" : "Free"}
+                          Set {plan === "ultra" ? "Ultra" : plan === "pro" ? "Pro" : "Free"}
                         </Button>
                       ))}
                       <Button

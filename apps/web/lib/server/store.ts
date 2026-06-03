@@ -2,7 +2,7 @@ import { randomUUID, scryptSync, timingSafeEqual } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
-export type UserPlan = "free" | "pro" | "plus";
+export type UserPlan = "free" | "pro" | "ultra";
 
 export type UserHistoryItem = {
   prompt: string;
@@ -272,7 +272,7 @@ export const consumeDailyVerificationQuota = async (
 };
 
 export const getDailyLimit = (plan: UserPlan): number => {
-  return plan === "free" ? 15 : 0;
+  return PLAN_CREDIT_LIMIT[plan];
 };
 
 export const trackEvent = async (
@@ -368,7 +368,7 @@ export const clearUserHistory = async (userId: string): Promise<void> => {
     await saveStore(store);
   });
 };
-const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: 15, pro: 50, plus: 500 };
+const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: 15, pro: 50, ultra: 150 };
 export const getMonthlyCreditLimit = (plan: UserPlan): number => (plan === "free" ? 0 : PLAN_CREDIT_LIMIT[plan]);
 export const getPlanCreditLimit = (plan: UserPlan): number => PLAN_CREDIT_LIMIT[plan];
 export const getVerificationCreditCost = (mode: "fast" | "deep" | "research"): number => (mode === "research" ? 5 : mode === "deep" ? 3 : 1);
@@ -463,7 +463,7 @@ export type AdminOverviewStats = {
 };
 
 const planToModelsLabel = (plan: UserPlan): string => {
-  if (plan === "pro" || plan === "plus") {
+  if (plan === "pro" || plan === "ultra") {
     return "GPT, Gemini, DeepSeek";
   }
   return "Mistral, Llama, Gemma";
@@ -520,7 +520,7 @@ export const getAdminOverviewStats = async (): Promise<AdminOverviewStats> => {
     verificationsToday: Math.max(verificationsToday, verificationEventsToday),
     freeUsers: store.users.filter((user) => user.plan === "free").length,
     proUsers: store.users.filter((user) => user.plan === "pro").length,
-    ultraUsers: store.users.filter((user) => user.plan === "plus").length,
+    ultraUsers: store.users.filter((user) => user.plan === "ultra").length,
     feedbackCount: store.analytics.filter((event) => event.event === "feedback_submitted").length,
     systemHealth,
     dataSource: "live"

@@ -1,6 +1,6 @@
 export type ClientSession = {
   email: string;
-  plan: "free" | "pro" | "plus";
+  plan: "free" | "pro" | "ultra";
   createdAt: string;
 };
 
@@ -23,11 +23,11 @@ export const getSessionHeaders = (): Record<string, string> => {
   return session?.email ? { "x-sva-session-email": session.email } : {};
 };
 
-export const setPlanIntent = (plan: "free" | "pro" | "plus") => localStorage.setItem(PLAN_INTENT_KEY, plan);
-export const getPlanIntent = (): "free" | "pro" | "plus" | null => (localStorage.getItem(PLAN_INTENT_KEY) as "free" | "pro" | "plus" | null);
+export const setPlanIntent = (plan: "free" | "pro" | "ultra") => localStorage.setItem(PLAN_INTENT_KEY, plan);
+export const getPlanIntent = (): "free" | "pro" | "ultra" | null => (localStorage.getItem(PLAN_INTENT_KEY) as "free" | "pro" | "ultra" | null);
 
 export const signupUser = (email: string, password: string): { ok: boolean; message?: string } => {
-  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: "free" | "pro" | "plus" }>;
+  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: "free" | "pro" | "ultra" }>;
   if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: "Account already exists." };
   const plan = getPlanIntent() ?? "free";
   users.push({ email, password, plan });
@@ -35,13 +35,13 @@ export const signupUser = (email: string, password: string): { ok: boolean; mess
   return { ok: true };
 };
 
-export const loginUser = (email: string, password: string): { ok: boolean; plan?: "free" | "pro" | "plus"; message?: string } => {
-  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: "free" | "pro" | "plus" }>;
+export const loginUser = (email: string, password: string): { ok: boolean; plan?: "free" | "pro" | "ultra"; message?: string } => {
+  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: "free" | "pro" | "ultra" }>;
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
   return user ? { ok: true, plan: user.plan } : { ok: false, message: "Invalid email or password." };
 };
 
-const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ? 10 : plan === "pro" ? 50 : 500);
+const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ? 10 : plan === "pro" ? 50 : 150);
 
 export const getUsage = (email: string, plan: ClientSession["plan"] = "free") => {
   const key = `${USAGE_KEY}_${email.toLowerCase()}_${new Date().toISOString().slice(0, 10)}`;
@@ -50,7 +50,7 @@ export const getUsage = (email: string, plan: ClientSession["plan"] = "free") =>
   return { used, limit, remaining: Math.max(0, limit - used), key };
 };
 
-export const incrementUsage = (email: string) => {
-  const usage = getUsage(email);
+export const incrementUsage = (email: string, plan: ClientSession["plan"] = "free") => {
+  const usage = getUsage(email, plan);
   localStorage.setItem(usage.key, String(usage.used + 1));
 };

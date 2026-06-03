@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     }
 
     let usage: VerificationUsageSummary = {
-      plan: (user?.plan ?? "free") as "free" | "pro" | "plus",
+      plan: user?.plan ?? "free",
       usedToday: user?.usedToday ?? 0,
       dailyLimit: user?.dailyLimit ?? getDailyLimit("free"),
       creditsRemaining: user?.creditsRemaining ?? 0

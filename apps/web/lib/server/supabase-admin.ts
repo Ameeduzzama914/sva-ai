@@ -11,7 +11,7 @@ import type {
 type Row = Record<string, unknown>;
 
 const isUserPlan = (value: unknown): value is UserPlan =>
-  value === "free" || value === "pro" || value === "plus";
+  value === "free" || value === "pro" || value === "ultra";
 
 const pickString = (row: Row, keys: string[]): string => {
   for (const key of keys) {
@@ -62,7 +62,7 @@ export const isSupabaseAdminConfigured = (): boolean => Boolean(getSupabaseAdmin
 const todayIsoDate = (): string => new Date().toISOString().slice(0, 10);
 
 const planToModelsLabel = (plan: UserPlan): string => {
-  if (plan === "pro" || plan === "plus") {
+  if (plan === "pro" || plan === "ultra") {
     return "GPT, Gemini, DeepSeek";
   }
   return "Mistral, Llama, Gemma";
@@ -115,7 +115,7 @@ const nextResetAt = (plan: UserPlan): string => {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)).toISOString();
 };
 
-const planCreditLimit = (plan: UserPlan): number => (plan === "free" ? 15 : plan === "pro" ? 50 : 500);
+const planCreditLimit = (plan: UserPlan): number => (plan === "free" ? 15 : plan === "pro" ? 50 : 150);
 
 const mapPublicUserRow = (row: Row): PublicUser | null => {
   const email = pickString(row, ["email"]).trim().toLowerCase();
@@ -135,7 +135,7 @@ const mapPublicUserRow = (row: Row): PublicUser | null => {
     usageCount: pickNumber(row, ["usage_count", "usageCount", "total_verifications", "totalVerifications"]),
     createdAt: toIsoString(pickString(row, ["created_at", "createdAt", "joined_date", "joinedDate"])),
     usedToday,
-    dailyLimit: plan === "free" ? 15 : 0,
+    dailyLimit: planCreditLimit(plan),
     onboardingCompleted: Boolean(row.onboarding_completed ?? row.onboardingCompleted),
     creditsRemaining: pickNumber(row, ["credits_remaining", "creditsRemaining"], planCreditLimit(plan)),
     creditsResetAt: toIsoString(pickString(row, ["credits_reset_at", "creditsResetAt"]) || nextResetAt(plan)),
@@ -274,7 +274,7 @@ export const fetchAdminOverviewFromSupabase = async (): Promise<AdminOverviewSta
 
   const freeUsers = users.filter((row) => pickString(row, ["plan"]) === "free").length;
   const proUsers = users.filter((row) => pickString(row, ["plan"]) === "pro").length;
-  const ultraUsers = users.filter((row) => pickString(row, ["plan"]) === "plus").length;
+  const ultraUsers = users.filter((row) => pickString(row, ["plan"]) === "ultra").length;
 
   const verificationsToday = logs.filter((row) => pickString(row, ["created_at", "createdAt"]).startsWith(today)).length;
   const newUsersToday = users.filter((row) => pickString(row, ["created_at", "createdAt"]).startsWith(today)).length;

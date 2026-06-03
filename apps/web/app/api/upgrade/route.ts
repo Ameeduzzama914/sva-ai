@@ -6,7 +6,7 @@ import { updateSupabaseUserPlanByEmail } from "../../../lib/server/supabase-admi
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    plan?: "pro" | "plus";
+    plan?: "pro" | "ultra";
     sessionEmail?: string;
   };
   const authenticatedUser = await getAuthenticatedUser(request);
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Unauthorized" } as VerifyApiError, { status: 401 });
   }
 
-  const plan = body.plan === "plus" ? "plus" : "pro";
+  const plan = body.plan === "ultra" ? "ultra" : "pro";
   const supabaseUser = await updateSupabaseUserPlanByEmail(authenticatedEmail, plan);
   if (supabaseUser) {
     await trackEvent("upgraded_to_pro", supabaseUser.userId, { plan, mode: "test_dev" });

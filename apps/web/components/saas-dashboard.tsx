@@ -84,7 +84,7 @@ export const SaasDashboard = () => {
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (session && usage && usage.remaining <= 0) { setErrorMessage("Daily free quota reached. Upgrade plan to continue."); return; }
+    if (session && usage && usage.remaining <= 0) { setErrorMessage("Daily verification quota reached. Upgrade plan or wait for reset."); return; }
     setIsLoading(true);
     setErrorMessage(null);
     setWarnings([]);
@@ -117,7 +117,7 @@ export const SaasDashboard = () => {
       if (data.usage?.plan) {
         setDisplayPlan(data.usage.plan);
       }
-      if (session) incrementUsage(session.email);
+      if (session) incrementUsage(session.email, displayPlan);
     } catch {
       setErrorMessage("Verification request failed. Please try again.");
     } finally {

@@ -27,7 +27,7 @@ type HistoryItem = {
 type UserSession = {
   userId: string;
   email: string;
-  plan: "free" | "pro" | "plus";
+  plan: "free" | "pro" | "ultra";
   usageCount: number;
   createdAt: string;
   usedToday: number;

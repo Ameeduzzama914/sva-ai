@@ -5,7 +5,7 @@ import { upgradeUserPlan, type UserPlan } from "../../../../../lib/server/store"
 type Params = { params: Promise<{ userId: string }> };
 
 const isUserPlan = (value: unknown): value is UserPlan =>
-  value === "free" || value === "pro" || value === "plus";
+  value === "free" || value === "pro" || value === "ultra";
 
 export async function PATCH(request: Request, { params }: Params) {
   const admin = await requireAdminSession(request);

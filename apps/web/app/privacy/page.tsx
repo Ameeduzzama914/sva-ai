@@ -12,7 +12,7 @@ export default function PrivacyPage() {
         <Card title="Account email and usage counters"><p className="text-sm text-slate-300">We track daily verification usage limits for Free plan accounts and maintain minimal auth data for demo access control.</p></Card>
         <Card title="Local/demo datastore warning"><p className="text-sm text-slate-300">Current Beta environments may run on local/demo datastores and are not intended for regulated or highly sensitive workloads.</p></Card>
         <Card title="Sensitive data warning"><p className="text-sm text-slate-300">Do not submit sensitive personal, medical, legal, or financial information. SVA responses are assistive and must be independently validated.</p></Card>
-        <Card title="Billing status"><p className="text-sm text-slate-300">Paid billing flows are not fully connected in Beta mode. Pro/Plus plan selection can be captured, but payment processing is coming soon.</p></Card>
+        <Card title="Billing status"><p className="text-sm text-slate-300">Paid billing flows are not fully connected in Beta mode. Pro/Ultra plan selection can be captured, but payment processing is coming soon.</p></Card>
         <Card title="Contact"><p className="text-sm text-slate-300">Contact placeholder: support@sva.app (Beta inbox).</p></Card>
               <Card title="Terms"><p className="text-sm text-slate-300">Beta terms coming soon.</p></Card>
         <Card title="Last updated"><p className="text-sm text-slate-300">May 2026</p></Card>

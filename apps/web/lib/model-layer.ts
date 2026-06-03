@@ -82,7 +82,7 @@ const proLayer: ModelLayerConfig = {
 };
 
 export const resolveModelLayer = (plan?: UserPlan | null): ModelLayerId => {
-  if (plan === "pro") {
+  if (plan === "pro" || plan === "ultra") {
     return "pro";
   }
   return "free";

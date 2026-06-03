@@ -2,7 +2,7 @@ import { Badge } from "../ui/badge";
 import type { UserPlan } from "../../lib/server/store";
 
 export const planLabel = (plan: UserPlan): string => {
-  if (plan === "plus") {
+  if (plan === "ultra") {
     return "Ultra";
   }
   if (plan === "pro") {
@@ -12,7 +12,7 @@ export const planLabel = (plan: UserPlan): string => {
 };
 
 export const PlanBadge = ({ plan }: { plan: UserPlan }) => {
-  const variant = plan === "plus" ? "violet" : plan === "pro" ? "indigo" : "neutral";
+  const variant = plan === "ultra" ? "violet" : plan === "pro" ? "indigo" : "neutral";
   return <Badge variant={variant}>{planLabel(plan)}</Badge>;
 };
 
