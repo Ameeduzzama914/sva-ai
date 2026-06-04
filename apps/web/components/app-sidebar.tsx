@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Badge } from "./ui/badge";
+import { getSession } from "../lib/client-auth";
 import type { UserPlan } from "../lib/server/store";
 
 const sectionClass = "space-y-1";
@@ -20,8 +23,10 @@ type AppSidebarProps = {
   plan?: UserPlan;
 };
 
-export const AppSidebar = ({ contradictionCount = 0, isLoggedIn = false, onLogout, remainingToday, plan = "free" }: AppSidebarProps) => {
-  const currentPlan = planMeta[plan];
+export const AppSidebar = ({ contradictionCount = 0, isLoggedIn = false, onLogout, remainingToday, plan }: AppSidebarProps) => {
+  const sessionPlan = getSession()?.plan;
+  const effectivePlan = plan ?? sessionPlan ?? "free";
+  const currentPlan = planMeta[effectivePlan];
   const remaining = remainingToday ?? currentPlan.limit;
 
   return (
@@ -40,7 +45,7 @@ export const AppSidebar = ({ contradictionCount = 0, isLoggedIn = false, onLogou
       <div className="mt-8 rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-blue-500/10 p-4 shadow-lg shadow-black/20">
         <p className={`text-sm font-semibold ${currentPlan.accent}`}>{currentPlan.label} Plan</p>
         <p className="mt-2 text-xs leading-5 text-slate-300">{remaining} of {currentPlan.limit} verifications remaining today</p>
-        {plan === "ultra" ? null : <Link href="/pricing" className={ctaClass}>Upgrade Plan</Link>}
+        {effectivePlan === "ultra" ? null : <Link href="/pricing" className={ctaClass}>Upgrade Plan</Link>}
       </div>
     </aside>
   );
