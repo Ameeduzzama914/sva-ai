@@ -6,18 +6,22 @@ import {
   fetchAdminHealth,
   fetchAdminLogs,
   fetchAdminOverview,
+  fetchAdminPayments,
   fetchAdminUsers
 } from "../../lib/admin-api";
 import type {
   AdminFeedbackRecord,
   AdminHealthPayload,
   AdminOverviewStats,
+  AdminPaymentsResponse,
   AdminUserRecord,
-  AdminVerificationLog
+  AdminVerificationLog,
+  PaymentRecord
 } from "../../lib/admin-types";
 import { AdminFeedbackSection } from "./admin-feedback-section";
 import { AdminLogsSection } from "./admin-logs-section";
 import { AdminOverviewCards } from "./admin-overview-cards";
+import { AdminPaymentsSection } from "./admin-payments-section";
 import { AdminPlanOverview } from "./admin-plan-overview";
 import { AdminSystemHealth } from "./admin-system-health";
 import { AdminUsersTable } from "./admin-users-table";
@@ -31,6 +35,9 @@ export const AdminDashboard = () => {
   const [feedbackEmpty, setFeedbackEmpty] = useState<string | null>(null);
   const [logs, setLogs] = useState<AdminVerificationLog[]>([]);
   const [logsEmpty, setLogsEmpty] = useState<string | null>(null);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [paymentSummary, setPaymentSummary] = useState<AdminPaymentsResponse["summary"] | null>(null);
+  const [paymentsEmpty, setPaymentsEmpty] = useState<string | null>(null);
   const [health, setHealth] = useState<AdminHealthPayload | null>(null);
   const [apiConnected, setApiConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -38,15 +45,16 @@ export const AdminDashboard = () => {
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
-    const [overviewRes, usersRes, feedbackRes, logsRes, healthRes] = await Promise.all([
+    const [overviewRes, usersRes, feedbackRes, logsRes, paymentsRes, healthRes] = await Promise.all([
       fetchAdminOverview(),
       fetchAdminUsers(),
       fetchAdminFeedback(),
       fetchAdminLogs(),
+      fetchAdminPayments(),
       fetchAdminHealth()
     ]);
 
-    const connected = Boolean(overviewRes || usersRes || feedbackRes || logsRes || healthRes);
+    const connected = Boolean(overviewRes || usersRes || feedbackRes || logsRes || paymentsRes || healthRes);
     setApiConnected(connected);
 
     if (!connected) {
@@ -73,6 +81,11 @@ export const AdminDashboard = () => {
       setLogs(logsRes.logs);
       setLogsEmpty(logsRes.emptyMessage);
     }
+    if (paymentsRes) {
+      setPayments(paymentsRes.payments);
+      setPaymentSummary(paymentsRes.summary);
+      setPaymentsEmpty(paymentsRes.emptyMessage);
+    }
     if (healthRes) {
       setHealth(healthRes.health);
     }
@@ -97,6 +110,8 @@ export const AdminDashboard = () => {
       </section>
 
       <AdminUsersTable initialUsers={users} canManagePlans={canManagePlans && apiConnected} onRefresh={loadDashboard} />
+
+      <AdminPaymentsSection payments={payments} summary={paymentSummary} emptyMessage={paymentsEmpty} />
 
       <AdminFeedbackSection feedback={feedback} emptyMessage={feedbackEmpty} />
 
