@@ -48,7 +48,7 @@ export default function BillingPage() {
         if (meResponse.ok && me.user) {
           setEmail(me.user.email);
           setPlan(me.user.plan);
-          setSession({ email: me.user.email, plan: me.user.plan, createdAt: me.user.createdAt });
+          setSession({ email: me.user.email, plan: me.user.plan, createdAt: me.user.createdAt, planVerified: me.user.plan !== "free" });
         }
       } catch {
         setStatus({ tone: "warning", message: "Unable to refresh account details. Showing local session data." });
