@@ -3,6 +3,7 @@ import type {
   AdminHealthPayload,
   AdminLogsResponse,
   AdminOverviewResponse,
+  AdminPaymentsResponse,
   AdminPlanUpdateBody,
   AdminUsersResponse
 } from "./admin-types";
@@ -37,6 +38,8 @@ export const fetchAdminUsers = () => adminFetch<AdminUsersResponse>("/api/admin/
 export const fetchAdminFeedback = () => adminFetch<AdminFeedbackResponse>("/api/admin/feedback");
 
 export const fetchAdminLogs = () => adminFetch<AdminLogsResponse>("/api/admin/logs");
+
+export const fetchAdminPayments = () => adminFetch<AdminPaymentsResponse>("/api/admin/payments");
 
 export const fetchAdminHealth = () => adminFetch<{ ok: true; health: AdminHealthPayload }>("/api/admin/health");
 
