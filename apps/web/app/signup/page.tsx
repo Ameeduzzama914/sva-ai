@@ -29,7 +29,7 @@ export default function SignUpPage() {
 
   const finishAuth = (userEmail: string, plan: UserPlan, createdAt: string) => {
     const intent = getPlanIntent();
-    setSession({ email: userEmail, plan, createdAt });
+    setSession({ email: userEmail, plan, createdAt, planVerified: plan !== "free" });
     if (intent === "pro" || intent === "ultra") {
       clearPlanIntent();
       router.push("/billing");
