@@ -4,14 +4,16 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MarketingNav } from "../../components/marketing-nav";
 import { ProviderLogo } from "../../components/provider-logo";
+import { RazorpayCheckoutButton } from "../../components/RazorpayCheckoutButton";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { isAdminEmail } from "../../lib/admin";
-import { getSession, getSessionHeaders, setPlanIntent, setSession } from "../../lib/client-auth";
+import { getSession, setPlanIntent } from "../../lib/client-auth";
+import type { UserPlan } from "../../lib/server/store";
 
 type Plan = {
-  key: "free" | "pro" | "ultra";
+  key: UserPlan;
   name: string;
   price: string;
   description: string;
@@ -57,38 +59,21 @@ const plans: Plan[] = [
 export default function PricingPage() {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
-  const [upgradingPlan, setUpgradingPlan] = useState<Plan["key"] | null>(null);
   const session = getSession();
   const showAdminEntry = isAdminEmail(session?.email);
 
-  const choosePlan = async (plan: Plan) => {
-    if ((plan.key === "pro" || plan.key === "ultra") && session) {
-      try {
-        setUpgradingPlan(plan.key);
-        const response = await fetch("/api/upgrade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...getSessionHeaders() },
-          body: JSON.stringify({ plan: plan.key, sessionEmail: session.email })
-        });
-        const data = (await response.json()) as { ok: boolean; message?: string; user?: { plan?: "free" | "pro" | "ultra" } };
-        if (!response.ok || !data.ok || data.user?.plan !== plan.key) {
-          setMsg(data.message ?? "Unable to upgrade right now. Please try again.");
-          return;
-        }
-        setSession({ email: session.email, plan: plan.key, createdAt: session.createdAt });
-        setMsg(`Your account is now on ${plan.name}.`);
-        router.push("/app");
-        return;
-      } catch {
-        setMsg("Unable to upgrade right now. Please try again.");
-        return;
-      } finally {
-        setUpgradingPlan(null);
-      }
-    }
-
-    setPlanIntent(plan.key);
+  const chooseFree = () => {
+    setPlanIntent("free");
     router.push(session ? "/app" : "/signup");
+  };
+
+  const requireLoginForPaidPlan = (plan: "pro" | "ultra") => {
+    if (!session) {
+      setPlanIntent(plan);
+      router.push("/signup");
+      return false;
+    }
+    return true;
   };
 
   return (
@@ -122,9 +107,25 @@ export default function PricingPage() {
                 <ul className="space-y-2 text-sm text-slate-300">
                   {plan.features.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-300">✓</span><span>{feature}</span></li>)}
                 </ul>
-                <Button variant={plan.featured ? "primary" : "secondary"} className="mt-auto w-full" onClick={() => void choosePlan(plan)} disabled={upgradingPlan === plan.key}>
-                  {upgradingPlan === plan.key ? "Upgrading..." : plan.ctaLabel}
-                </Button>
+                {plan.key === "free" ? (
+                  <Button variant="secondary" className="mt-auto w-full" onClick={chooseFree}>{plan.ctaLabel}</Button>
+                ) : (
+                  <RazorpayCheckoutButton
+                    plan={plan.key}
+                    label={plan.ctaLabel}
+                    className="mt-auto w-full"
+                    onSuccess={(_, message) => {
+                      setMsg(message);
+                      router.push("/billing");
+                    }}
+                    onFailure={(message) => setMsg(message)}
+                  />
+                )}
+                {plan.key !== "free" && !session ? (
+                  <Button variant="ghost" className="w-full" onClick={() => requireLoginForPaidPlan(plan.key)}>
+                    Login to upgrade
+                  </Button>
+                ) : null}
               </div>
             </Card>
           ))}
