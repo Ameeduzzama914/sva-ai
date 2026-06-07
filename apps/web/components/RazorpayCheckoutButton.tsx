@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { getSession, getSessionHeaders, setSession } from "../lib/client-auth";
+import { getSession, getSessionHeaders, setPlanIntent, setSession } from "../lib/client-auth";
 import type { UserPlan } from "../lib/server/store";
 import { Button } from "./ui/button";
 
@@ -66,6 +67,7 @@ const loadRazorpayScript = async (): Promise<boolean> => {
 };
 
 export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFailure }: Props) => {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const session = getSession();
 
@@ -74,8 +76,10 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
   };
 
   const startCheckout = async () => {
-    if (!session) {
-      fail("Please login first to upgrade your plan.");
+    const activeSession = getSession();
+    if (!activeSession) {
+      setPlanIntent(plan);
+      router.push("/signup");
       return;
     }
 
@@ -115,7 +119,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
         name: "SVA",
         description: descriptions[plan],
         order_id: order.order_id,
-        prefill: { email: order.user?.email ?? session.email, name: order.user?.name },
+        prefill: { email: order.user?.email ?? activeSession.email, name: order.user?.name },
         notes: { plan, product: "SVA" },
         theme: { color: "#8b5cf6" },
         modal: {
