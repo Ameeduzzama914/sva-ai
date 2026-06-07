@@ -62,18 +62,9 @@ export default function PricingPage() {
   const session = getSession();
   const showAdminEntry = isAdminEmail(session?.email);
 
-  const chooseFree = () => {
-    setPlanIntent("free");
-    router.push(session ? "/app" : "/signup");
-  };
-
-  const requireLoginForPaidPlan = (plan: "pro" | "ultra") => {
-    if (!session) {
-      setPlanIntent(plan);
-      router.push("/signup");
-      return false;
-    }
-    return true;
+  const choosePlanIntent = (plan: UserPlan) => {
+    setPlanIntent(plan);
+    router.push(session || plan === "free" ? "/app" : "/signup");
   };
 
   return (
@@ -107,8 +98,10 @@ export default function PricingPage() {
                 <ul className="space-y-2 text-sm text-slate-300">
                   {plan.features.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-300">✓</span><span>{feature}</span></li>)}
                 </ul>
-                {plan.key === "free" ? (
-                  <Button variant="secondary" className="mt-auto w-full" onClick={chooseFree}>{plan.ctaLabel}</Button>
+                {plan.key === "free" || !session ? (
+                  <Button variant={plan.featured ? "primary" : "secondary"} className="mt-auto w-full" onClick={() => choosePlanIntent(plan.key)}>
+                    {plan.ctaLabel}
+                  </Button>
                 ) : (
                   <RazorpayCheckoutButton
                     plan={plan.key}
@@ -121,11 +114,6 @@ export default function PricingPage() {
                     onFailure={(message) => setMsg(message)}
                   />
                 )}
-                {plan.key !== "free" && !session ? (
-                  <Button variant="ghost" className="w-full" onClick={() => requireLoginForPaidPlan(plan.key)}>
-                    Login to upgrade
-                  </Button>
-                ) : null}
               </div>
             </Card>
           ))}
