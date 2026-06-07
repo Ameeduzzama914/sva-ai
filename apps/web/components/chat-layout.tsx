@@ -115,18 +115,8 @@ export const ChatLayout = () => {
     setHistory([]);
   };
 
-  const handleUpgrade = async () => {
-    if (!user) {
-      setErrorMessage("Login to enable Pro upgrade.");
-      return;
-    }
-    const response = await fetch("/api/billing/upgrade", { method: "POST" });
-    const data = (await response.json()) as { ok: boolean; message?: string; user?: UserSession };
-    if (!response.ok || !data.ok || !data.user) {
-      setErrorMessage(data.message ?? "Upgrade failed.");
-      return;
-    }
-    setUser(data.user);
+  const goToPricing = () => {
+    window.location.href = "/pricing";
   };
 
   const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
@@ -211,7 +201,7 @@ export const ChatLayout = () => {
             <strong>Pro Early Access:</strong> ₹499/month
           </p>
           <p className="muted-line">Soon ₹999/month</p>
-          <button className="run-button" type="button" onClick={handleUpgrade}>
+          <button className="run-button" type="button" onClick={goToPricing}>
             Upgrade
           </button>
         </div>
