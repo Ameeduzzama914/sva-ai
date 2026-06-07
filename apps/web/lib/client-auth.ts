@@ -1,6 +1,8 @@
+export type UserPlan = "free" | "pro" | "ultra";
+
 export type ClientSession = {
   email: string;
-  plan: "free" | "pro" | "ultra";
+  plan: UserPlan;
   createdAt: string;
 };
 
@@ -9,11 +11,23 @@ const USERS_KEY = "sva_users";
 const PLAN_INTENT_KEY = "sva_plan_intent";
 const USAGE_KEY = "sva_usage";
 
+const isUserPlan = (value: unknown): value is UserPlan => value === "free" || value === "pro" || value === "ultra";
+
 export const getSession = (): ClientSession | null => {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
-  try { return JSON.parse(raw) as ClientSession; } catch { return null; }
+  try {
+    const parsed = JSON.parse(raw) as Partial<ClientSession>;
+    if (!parsed.email) return null;
+    return {
+      email: parsed.email,
+      plan: isUserPlan(parsed.plan) ? parsed.plan : "free",
+      createdAt: parsed.createdAt ?? new Date().toISOString()
+    };
+  } catch {
+    return null;
+  }
 };
 
 export const setSession = (session: ClientSession) => localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -23,22 +37,25 @@ export const getSessionHeaders = (): Record<string, string> => {
   return session?.email ? { "x-sva-session-email": session.email } : {};
 };
 
-export const setPlanIntent = (plan: "free" | "pro" | "ultra") => localStorage.setItem(PLAN_INTENT_KEY, plan);
-export const getPlanIntent = (): "free" | "pro" | "ultra" | null => (localStorage.getItem(PLAN_INTENT_KEY) as "free" | "pro" | "ultra" | null);
+export const setPlanIntent = (plan: UserPlan) => localStorage.setItem(PLAN_INTENT_KEY, plan);
+export const getPlanIntent = (): UserPlan | null => {
+  const value = localStorage.getItem(PLAN_INTENT_KEY);
+  return isUserPlan(value) ? value : null;
+};
+export const clearPlanIntent = () => localStorage.removeItem(PLAN_INTENT_KEY);
 
 export const signupUser = (email: string, password: string): { ok: boolean; message?: string } => {
-  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: "free" | "pro" | "ultra" }>;
+  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: UserPlan }>;
   if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: "Account already exists." };
-  const plan = getPlanIntent() ?? "free";
-  users.push({ email, password, plan });
+  users.push({ email, password, plan: "free" });
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
   return { ok: true };
 };
 
-export const loginUser = (email: string, password: string): { ok: boolean; plan?: "free" | "pro" | "ultra"; message?: string } => {
-  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: "free" | "pro" | "ultra" }>;
+export const loginUser = (email: string, password: string): { ok: boolean; plan?: UserPlan; message?: string } => {
+  const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: UserPlan }>;
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-  return user ? { ok: true, plan: user.plan } : { ok: false, message: "Invalid email or password." };
+  return user ? { ok: true, plan: isUserPlan(user.plan) ? user.plan : "free" } : { ok: false, message: "Invalid email or password." };
 };
 
 const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ? 10 : plan === "pro" ? 50 : 150);
