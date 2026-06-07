@@ -5,8 +5,9 @@ import type {
   AdminVerificationLog,
   UserPlan
 } from "./server/store";
+import type { PaymentRecord } from "./server/payments";
 
-export type { AdminFeedbackRecord, AdminOverviewStats, AdminUserRecord, AdminVerificationLog };
+export type { AdminFeedbackRecord, AdminOverviewStats, AdminUserRecord, AdminVerificationLog, PaymentRecord };
 
 export type AdminHealthStatus = "healthy" | "pending" | "issue";
 
@@ -42,6 +43,19 @@ export type AdminFeedbackResponse = {
 export type AdminLogsResponse = {
   ok: true;
   logs: AdminVerificationLog[];
+  emptyMessage: string | null;
+};
+
+export type AdminPaymentsResponse = {
+  ok: true;
+  payments: PaymentRecord[];
+  summary: {
+    totalPayments: number;
+    totalRevenue: number;
+    proUpgrades: number;
+    ultraUpgrades: number;
+    failedPayments: number;
+  };
   emptyMessage: string | null;
 };
 
