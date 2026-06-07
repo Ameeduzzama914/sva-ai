@@ -7,7 +7,7 @@ import {
   missingRazorpayKeysMessage,
   verifyRazorpaySignature
 } from "../../../../../lib/server/razorpay";
-import { updateSupabaseUserPlanByEmail } from "../../../../../lib/server/supabase-admin";
+import { updateSupabasePaidPlanByEmail } from "../../../../../lib/server/supabase-plan";
 import { getUserByEmail, toPublicUser, trackEvent, upgradeUserPlan } from "../../../../../lib/server/store";
 
 type Body = {
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Payment verification failed. No plan change was made." }, { status: 400 });
   }
 
-  const supabaseUser = await updateSupabaseUserPlanByEmail(user.email, plan);
+  const supabaseUser = await updateSupabasePaidPlanByEmail(user.email, plan);
   if (supabaseUser) {
     await insertPaymentRecord({
       userId: supabaseUser.userId,
