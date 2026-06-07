@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "../../../../../lib/server/auth";
+import { getPaymentSessionUser } from "../../../../../lib/server/payment-session";
 import { insertPaymentRecord } from "../../../../../lib/server/payments";
 import {
   getRazorpayConfig,
@@ -8,7 +8,7 @@ import {
   verifyRazorpaySignature
 } from "../../../../../lib/server/razorpay";
 import { updateSupabasePaidPlanByEmail } from "../../../../../lib/server/supabase-plan";
-import { getUserByEmail, toPublicUser, trackEvent, upgradeUserPlan } from "../../../../../lib/server/store";
+import { getUserByEmail, toPublicUser, trackEvent, upgradeUserPlan, type PublicUser } from "../../../../../lib/server/store";
 
 type Body = {
   razorpay_payment_id?: unknown;
@@ -19,8 +19,21 @@ type Body = {
 
 const asString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
+const verifiedLocalPaymentUser = (user: PublicUser, plan: "pro" | "ultra"): PublicUser => {
+  const dailyLimit = plan === "pro" ? 50 : 150;
+  return {
+    ...user,
+    plan,
+    dailyLimit,
+    creditsRemaining: dailyLimit,
+    usedToday: 0,
+    dailyUsage: 0,
+    monthlyUsage: 0
+  };
+};
+
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser(request);
+  const user = await getPaymentSessionUser(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "Please login first." }, { status: 401 });
   }
@@ -76,25 +89,36 @@ export async function POST(request: Request) {
   }
 
   const localUser = await getUserByEmail(user.email);
-  if (!localUser) {
-    return NextResponse.json({ ok: false, message: "Unable to find account for plan upgrade." }, { status: 404 });
+  if (localUser) {
+    const upgraded = await upgradeUserPlan(localUser.userId, plan);
+    if (!upgraded) {
+      return NextResponse.json({ ok: false, message: "Payment verified, but plan upgrade failed. Contact support." }, { status: 500 });
+    }
+
+    await insertPaymentRecord({
+      userId: upgraded.userId,
+      email: upgraded.email,
+      plan,
+      razorpayOrderId: orderId,
+      razorpayPaymentId: paymentId,
+      razorpaySignature: signature,
+      status: "success"
+    });
+    await trackEvent("upgraded_to_pro", upgraded.userId, { plan, paymentProvider: "razorpay" });
+
+    return NextResponse.json({ ok: true, user: toPublicUser(upgraded), message: `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.` });
   }
 
-  const upgraded = await upgradeUserPlan(localUser.userId, plan);
-  if (!upgraded) {
-    return NextResponse.json({ ok: false, message: "Payment verified, but plan upgrade failed. Contact support." }, { status: 500 });
-  }
-
+  const paidSessionUser = verifiedLocalPaymentUser(user, plan);
   await insertPaymentRecord({
-    userId: upgraded.userId,
-    email: upgraded.email,
+    userId: paidSessionUser.userId,
+    email: paidSessionUser.email,
     plan,
     razorpayOrderId: orderId,
     razorpayPaymentId: paymentId,
     razorpaySignature: signature,
     status: "success"
   });
-  await trackEvent("upgraded_to_pro", upgraded.userId, { plan, paymentProvider: "razorpay" });
 
-  return NextResponse.json({ ok: true, user: toPublicUser(upgraded), message: `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.` });
+  return NextResponse.json({ ok: true, user: paidSessionUser, message: `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.` });
 }
