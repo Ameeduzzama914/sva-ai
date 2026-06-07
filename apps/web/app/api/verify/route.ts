@@ -60,23 +60,36 @@ export async function POST(request: Request) {
 
       creditsUsed = getVerificationCreditCost(mode);
       const localQuota = await consumeDailyVerificationQuota(user.userId);
-      const quota = localQuota ?? (await consumeSupabaseDailyVerificationQuota(user.userId, creditsUsed));
 
-      if (!quota) {
-        return NextResponse.json({ ok: false, message: "Unable to verify usage quota. Please try again." } as VerifyApiError, { status: 503 });
+      if (localQuota) {
+        const enforcedLimit = getPlanDailyVerificationLimit(localQuota.plan);
+        if (!localQuota.ok || localQuota.usedToday > enforcedLimit) {
+          return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
+        }
+        usage = {
+          plan: localQuota.plan,
+          usedToday: localQuota.usedToday,
+          dailyLimit: enforcedLimit,
+          creditsRemaining: user.creditsRemaining
+        };
+      } else {
+        const supabaseQuota = await consumeSupabaseDailyVerificationQuota(user.userId, creditsUsed);
+        if (!supabaseQuota) {
+          return NextResponse.json({ ok: false, message: "Unable to verify usage quota. Please try again." } as VerifyApiError, { status: 503 });
+        }
+
+        const enforcedLimit = getPlanDailyVerificationLimit(supabaseQuota.plan);
+        if (!supabaseQuota.ok || supabaseQuota.usedToday > enforcedLimit) {
+          return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
+        }
+
+        usage = {
+          plan: supabaseQuota.plan,
+          usedToday: supabaseQuota.usedToday,
+          dailyLimit: enforcedLimit,
+          creditsRemaining: supabaseQuota.creditsRemaining
+        };
       }
-
-      const enforcedLimit = getPlanDailyVerificationLimit(quota.plan);
-      if (!quota.ok || quota.usedToday > enforcedLimit) {
-        return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
-      }
-
-      usage = {
-        plan: quota.plan,
-        usedToday: quota.usedToday,
-        dailyLimit: enforcedLimit,
-        creditsRemaining: quota.creditsRemaining
-      };
     }
 
     const verificationPlan = user?.plan ?? "free";
