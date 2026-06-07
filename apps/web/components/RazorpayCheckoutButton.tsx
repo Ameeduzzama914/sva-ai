@@ -69,7 +69,6 @@ const loadRazorpayScript = async (): Promise<boolean> => {
 export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFailure }: Props) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const session = getSession();
 
   const fail = (message: string) => {
     onFailure?.(message);
@@ -147,7 +146,12 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
               return;
             }
 
-            setSession({ email: verified.user.email, plan: verified.user.plan, createdAt: verified.user.createdAt });
+            setSession({
+              email: verified.user.email,
+              plan: verified.user.plan,
+              createdAt: verified.user.createdAt,
+              planVerified: verified.user.plan !== "free"
+            });
             onSuccess?.(verified.user.plan, verified.message ?? `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`);
           } catch {
             fail("Payment verification failed due to a network error. No plan change was made.");
