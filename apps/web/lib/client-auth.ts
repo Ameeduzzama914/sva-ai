@@ -4,6 +4,7 @@ export type ClientSession = {
   email: string;
   plan: UserPlan;
   createdAt: string;
+  planVerified?: boolean;
 };
 
 const SESSION_KEY = "sva_session";
@@ -20,10 +21,13 @@ export const getSession = (): ClientSession | null => {
   try {
     const parsed = JSON.parse(raw) as Partial<ClientSession>;
     if (!parsed.email) return null;
+    const parsedPlan = isUserPlan(parsed.plan) ? parsed.plan : "free";
+    const plan = parsedPlan === "free" || parsed.planVerified ? parsedPlan : "free";
     return {
       email: parsed.email,
-      plan: isUserPlan(parsed.plan) ? parsed.plan : "free",
-      createdAt: parsed.createdAt ?? new Date().toISOString()
+      plan,
+      createdAt: parsed.createdAt ?? new Date().toISOString(),
+      planVerified: Boolean(parsed.planVerified)
     };
   } catch {
     return null;
@@ -55,7 +59,7 @@ export const signupUser = (email: string, password: string): { ok: boolean; mess
 export const loginUser = (email: string, password: string): { ok: boolean; plan?: UserPlan; message?: string } => {
   const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: UserPlan }>;
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-  return user ? { ok: true, plan: isUserPlan(user.plan) ? user.plan : "free" } : { ok: false, message: "Invalid email or password." };
+  return user ? { ok: true, plan: "free" } : { ok: false, message: "Invalid email or password." };
 };
 
 const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ? 10 : plan === "pro" ? 50 : 150);
