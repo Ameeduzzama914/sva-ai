@@ -62,9 +62,9 @@ export default function PricingPage() {
   const session = getSession();
   const showAdminEntry = isAdminEmail(session?.email);
 
-  const choosePlanIntent = (plan: UserPlan) => {
-    setPlanIntent(plan);
-    router.push(session || plan === "free" ? "/app" : "/signup");
+  const chooseFree = () => {
+    setPlanIntent("free");
+    router.push(session ? "/app" : "/signup");
   };
 
   return (
@@ -98,10 +98,8 @@ export default function PricingPage() {
                 <ul className="space-y-2 text-sm text-slate-300">
                   {plan.features.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-300">✓</span><span>{feature}</span></li>)}
                 </ul>
-                {plan.key === "free" || !session ? (
-                  <Button variant={plan.featured ? "primary" : "secondary"} className="mt-auto w-full" onClick={() => choosePlanIntent(plan.key)}>
-                    {plan.ctaLabel}
-                  </Button>
+                {plan.key === "free" ? (
+                  <Button variant="secondary" className="mt-auto w-full" onClick={chooseFree}>{plan.ctaLabel}</Button>
                 ) : (
                   <RazorpayCheckoutButton
                     plan={plan.key}
