@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "../../../../../lib/server/auth";
+import { getPaymentSessionUser } from "../../../../../lib/server/payment-session";
 import {
   getRazorpayConfig,
   isPaidPlan,
@@ -19,7 +19,7 @@ type RazorpayOrdersClient = {
 };
 
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser(request);
+  const user = await getPaymentSessionUser(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "Please login first." }, { status: 401 });
   }
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const price = RAZORPAY_PLAN_PRICES[body.plan];
-  const receipt = `sva_${body.plan}_${user.userId}_${Date.now()}`.slice(0, 40);
+  const receipt = `sva_${body.plan}_${user.userId}_${Date.now()}`.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 40);
 
   try {
     const Razorpay = (await import("razorpay")).default;
