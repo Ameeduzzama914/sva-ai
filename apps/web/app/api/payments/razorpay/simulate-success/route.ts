@@ -7,14 +7,12 @@ type Body = {
   plan?: unknown;
 };
 
-const simulationEnabled = (): boolean => {
-  if (process.env.NODE_ENV === "production") return false;
-  return process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_TEST_PAYMENTS === "true";
-};
+const simulationEnabled = (): boolean =>
+  process.env.NODE_ENV === "development" && process.env.ENABLE_LOCAL_PAYMENT_SIMULATION === "true";
 
 export async function POST(request: Request) {
   if (!simulationEnabled()) {
-    return NextResponse.json({ ok: false, message: "Test payment simulation is disabled in production." }, { status: 403 });
+    return NextResponse.json({ ok: false, message: "Local payment simulation is disabled." }, { status: 403 });
   }
 
   const user = await getPaymentSessionUser(request);
@@ -34,9 +32,9 @@ export async function POST(request: Request) {
     plan,
     razorpayOrderId: `sim_order_${plan}_${now}`,
     razorpayPaymentId: `sim_payment_${plan}_${now}`,
-    razorpaySignature: "razorpay_test_simulation",
-    paymentProvider: "razorpay_test_simulation",
-    paymentSource: "razorpay_test_simulation"
+    razorpaySignature: "local_payment_simulation",
+    paymentProvider: "local_payment_simulation",
+    paymentSource: "local_payment_simulation"
   });
 
   if (!activation.ok) {
@@ -46,6 +44,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     user: activation.user,
-    message: `Simulated payment verified. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`
+    message: `Local simulated payment verified. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`
   });
 }
