@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../../components/app-sidebar";
 import { RazorpayCheckoutButton } from "../../components/RazorpayCheckoutButton";
+import { TestPaymentSimulationButton } from "../../components/TestPaymentSimulationButton";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -18,6 +19,8 @@ type PaymentRecord = {
   razorpayOrderId: string;
   razorpayPaymentId: string | null;
   status: "success" | "failed";
+  provider?: string | null;
+  source?: string | null;
   createdAt: string;
 };
 
@@ -35,6 +38,16 @@ export default function BillingPage() {
   const session = getSession();
 
   const usage = useMemo(() => (email ? getUsage(email, plan) : null), [email, plan]);
+
+  const refreshPaymentHistory = useCallback(async () => {
+    try {
+      const historyResponse = await fetch("/api/payments/history", { headers: getSessionHeaders(), credentials: "include" });
+      const history = (await historyResponse.json()) as { ok: boolean; payments?: PaymentRecord[] };
+      if (historyResponse.ok && history.ok) setPayments(history.payments ?? []);
+    } catch {
+      /* Payment history is optional because the payments table may not exist yet. */
+    }
+  }, []);
 
   useEffect(() => {
     const loadBilling = async () => {
@@ -54,17 +67,11 @@ export default function BillingPage() {
         setStatus({ tone: "warning", message: "Unable to refresh account details. Showing local session data." });
       }
 
-      try {
-        const historyResponse = await fetch("/api/payments/history", { headers: getSessionHeaders(), credentials: "include" });
-        const history = (await historyResponse.json()) as { ok: boolean; payments?: PaymentRecord[] };
-        if (historyResponse.ok && history.ok) setPayments(history.payments ?? []);
-      } catch {
-        /* Payment history is optional because the payments table may not exist yet. */
-      }
+      await refreshPaymentHistory();
     };
 
     void loadBilling();
-  }, [session?.email, session?.plan]);
+  }, [refreshPaymentHistory, session?.email, session?.plan]);
 
   if (!session) {
     return (
@@ -118,15 +125,28 @@ export default function BillingPage() {
                   ) : item === "pro" && plan === "ultra" ? (
                     <Button className="mt-auto w-full" disabled>Included in Ultra</Button>
                   ) : (
-                    <RazorpayCheckoutButton
-                      plan={item}
-                      className="mt-auto w-full"
-                      onSuccess={(nextPlan, message) => {
-                        setPlan(nextPlan);
-                        setStatus({ tone: "success", message });
-                      }}
-                      onFailure={(message) => setStatus({ tone: "error", message })}
-                    />
+                    <div className="mt-auto space-y-2">
+                      <RazorpayCheckoutButton
+                        plan={item}
+                        className="w-full"
+                        onSuccess={(nextPlan, message) => {
+                          setPlan(nextPlan);
+                          setStatus({ tone: "success", message });
+                          void refreshPaymentHistory();
+                        }}
+                        onFailure={(message) => setStatus({ tone: "error", message })}
+                      />
+                      <TestPaymentSimulationButton
+                        plan={item}
+                        className="w-full"
+                        onSuccess={(nextPlan, message) => {
+                          setPlan(nextPlan);
+                          setStatus({ tone: "success", message });
+                          void refreshPaymentHistory();
+                        }}
+                        onFailure={(message) => setStatus({ tone: "error", message })}
+                      />
+                    </div>
                   )}
                 </div>
               </Card>
