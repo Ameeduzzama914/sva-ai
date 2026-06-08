@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../../components/app-sidebar";
 import { RazorpayCheckoutButton } from "../../components/RazorpayCheckoutButton";
-import { TestPaymentSimulationButton } from "../../components/TestPaymentSimulationButton";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -125,28 +124,16 @@ export default function BillingPage() {
                   ) : item === "pro" && plan === "ultra" ? (
                     <Button className="mt-auto w-full" disabled>Included in Ultra</Button>
                   ) : (
-                    <div className="mt-auto space-y-2">
-                      <RazorpayCheckoutButton
-                        plan={item}
-                        className="w-full"
-                        onSuccess={(nextPlan, message) => {
-                          setPlan(nextPlan);
-                          setStatus({ tone: "success", message });
-                          void refreshPaymentHistory();
-                        }}
-                        onFailure={(message) => setStatus({ tone: "error", message })}
-                      />
-                      <TestPaymentSimulationButton
-                        plan={item}
-                        className="w-full"
-                        onSuccess={(nextPlan, message) => {
-                          setPlan(nextPlan);
-                          setStatus({ tone: "success", message });
-                          void refreshPaymentHistory();
-                        }}
-                        onFailure={(message) => setStatus({ tone: "error", message })}
-                      />
-                    </div>
+                    <RazorpayCheckoutButton
+                      plan={item}
+                      className="mt-auto w-full"
+                      onSuccess={(nextPlan, message) => {
+                        setPlan(nextPlan);
+                        setStatus({ tone: "success", message });
+                        void refreshPaymentHistory();
+                      }}
+                      onFailure={(message) => setStatus({ tone: "error", message })}
+                    />
                   )}
                 </div>
               </Card>
