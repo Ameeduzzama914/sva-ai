@@ -5,7 +5,6 @@ import { useState } from "react";
 import { MarketingNav } from "../../components/marketing-nav";
 import { ProviderLogo } from "../../components/provider-logo";
 import { RazorpayCheckoutButton } from "../../components/RazorpayCheckoutButton";
-import { TestPaymentSimulationButton } from "../../components/TestPaymentSimulationButton";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -102,27 +101,16 @@ export default function PricingPage() {
                 {plan.key === "free" ? (
                   <Button variant="secondary" className="mt-auto w-full" onClick={chooseFree}>{plan.ctaLabel}</Button>
                 ) : (
-                  <div className="mt-auto space-y-2">
-                    <RazorpayCheckoutButton
-                      plan={plan.key}
-                      label={plan.ctaLabel}
-                      className="w-full"
-                      onSuccess={(_, message) => {
-                        setMsg(message);
-                        router.push("/billing");
-                      }}
-                      onFailure={(message) => setMsg(message)}
-                    />
-                    <TestPaymentSimulationButton
-                      plan={plan.key}
-                      className="w-full"
-                      onSuccess={(_, message) => {
-                        setMsg(message);
-                        router.push("/billing");
-                      }}
-                      onFailure={(message) => setMsg(message)}
-                    />
-                  </div>
+                  <RazorpayCheckoutButton
+                    plan={plan.key}
+                    label={plan.ctaLabel}
+                    className="mt-auto w-full"
+                    onSuccess={(_, message) => {
+                      setMsg(message);
+                      router.push("/billing");
+                    }}
+                    onFailure={(message) => setMsg(message)}
+                  />
                 )}
               </div>
             </Card>
