@@ -150,6 +150,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
         return;
       }
 
+      const createdOrderId = order.order_id;
       let paymentSettled = false;
       const checkout = new window.Razorpay({
         key: order.key_id,
@@ -157,7 +158,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
         currency: order.currency,
         name: "SVA",
         description: descriptions[plan],
-        order_id: order.order_id,
+        order_id: createdOrderId,
         prefill: { email: order.user?.email ?? activeSession.email, name: order.user?.name },
         notes: { plan, product: "SVA" },
         theme: { color: "#8b5cf6" },
@@ -205,7 +206,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
       checkout.on?.("payment.failed", (response) => {
         paymentSettled = true;
         setLoading(false);
-        const orderId = response.error?.metadata?.order_id ?? order.order_id;
+        const orderId = response.error?.metadata?.order_id ?? createdOrderId;
         const paymentId = response.error?.metadata?.payment_id;
         void recordPaymentFailure({ orderId, paymentId, reason: response.error?.reason ?? response.error?.code });
         fail(response.error?.description ?? "Payment failed. No plan change was made.");
