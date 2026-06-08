@@ -93,6 +93,11 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
     onFailure?.(message);
   };
 
+  const stopWithFailure = (message: string) => {
+    setLoading(false);
+    fail(message);
+  };
+
   const recordPaymentFailure = async (input: { orderId: string; paymentId?: string; reason?: string }) => {
     if (!input.orderId) return;
     await fetch("/api/payments/razorpay/record-failure", {
@@ -120,7 +125,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
     try {
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded || !window.Razorpay) {
-        fail("Unable to load Razorpay checkout. Please try again.");
+        stopWithFailure("Unable to load Razorpay checkout. Please try again.");
         return;
       }
 
@@ -141,7 +146,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
       };
 
       if (!orderResponse.ok || !order.ok || !order.order_id || !order.key_id || !order.amount || !order.currency) {
-        fail(order.message ?? "Unable to create payment order. Please try again.");
+        stopWithFailure(order.message ?? "Unable to create payment order. Please try again.");
         return;
       }
 
@@ -208,9 +213,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
 
       checkout.open();
     } catch {
-      fail("Payment was not completed. No plan change was made.");
-    } finally {
-      if (!window.Razorpay) setLoading(false);
+      stopWithFailure("Payment was not completed. No plan change was made.");
     }
   };
 
