@@ -8,6 +8,24 @@ import { Button } from "./ui/button";
 
 type PaidPlan = "pro" | "ultra";
 
+type RazorpayPaymentResponse = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayFailureResponse = {
+  error?: {
+    code?: string;
+    description?: string;
+    reason?: string;
+    metadata?: {
+      order_id?: string;
+      payment_id?: string;
+    };
+  };
+};
+
 type RazorpayOptions = {
   key: string;
   amount: number;
@@ -18,17 +36,18 @@ type RazorpayOptions = {
   prefill?: { email?: string; name?: string };
   notes?: Record<string, string>;
   theme?: { color?: string };
-  handler: (response: {
-    razorpay_payment_id: string;
-    razorpay_order_id: string;
-    razorpay_signature: string;
-  }) => void;
+  handler: (response: RazorpayPaymentResponse) => void;
   modal?: { ondismiss?: () => void };
+};
+
+type RazorpayInstance = {
+  open: () => void;
+  on?: (event: "payment.failed", callback: (response: RazorpayFailureResponse) => void) => void;
 };
 
 declare global {
   interface Window {
-    Razorpay?: new (options: RazorpayOptions) => { open: () => void };
+    Razorpay?: new (options: RazorpayOptions) => RazorpayInstance;
   }
 }
 
@@ -74,6 +93,21 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
     onFailure?.(message);
   };
 
+  const recordPaymentFailure = async (input: { orderId: string; paymentId?: string; reason?: string }) => {
+    if (!input.orderId) return;
+    await fetch("/api/payments/razorpay/record-failure", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...getSessionHeaders() },
+      body: JSON.stringify({
+        plan,
+        razorpay_order_id: input.orderId,
+        razorpay_payment_id: input.paymentId,
+        reason: input.reason
+      })
+    }).catch(() => undefined);
+  };
+
   const startCheckout = async () => {
     const activeSession = getSession();
     if (!activeSession) {
@@ -111,6 +145,7 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
         return;
       }
 
+      let paymentSettled = false;
       const checkout = new window.Razorpay({
         key: order.key_id,
         amount: order.amount,
@@ -124,10 +159,11 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
         modal: {
           ondismiss: () => {
             setLoading(false);
-            fail("Payment was not completed. No plan change was made.");
+            if (!paymentSettled) fail("Payment cancelled. No plan change was made.");
           }
         },
         handler: async (paymentResponse) => {
+          paymentSettled = true;
           try {
             const verifyResponse = await fetch("/api/payments/razorpay/verify", {
               method: "POST",
@@ -159,6 +195,15 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
             setLoading(false);
           }
         }
+      });
+
+      checkout.on?.("payment.failed", (response) => {
+        paymentSettled = true;
+        setLoading(false);
+        const orderId = response.error?.metadata?.order_id ?? order.order_id;
+        const paymentId = response.error?.metadata?.payment_id;
+        void recordPaymentFailure({ orderId, paymentId, reason: response.error?.reason ?? response.error?.code });
+        fail(response.error?.description ?? "Payment failed. No plan change was made.");
       });
 
       checkout.open();
