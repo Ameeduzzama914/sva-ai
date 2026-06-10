@@ -198,9 +198,9 @@ export const ChatLayout = () => {
             <strong>Free:</strong> 10 verifications/day
           </p>
           <p>
-            <strong>Pro Early Access:</strong> ₹499/month
+            <strong>Pro Early Access:</strong> ₹1/month
           </p>
-          <p className="muted-line">Soon ₹999/month</p>
+          <p className="muted-line">Ultra: ₹2/month</p>
           <button className="run-button" type="button" onClick={goToPricing}>
             Upgrade
           </button>
