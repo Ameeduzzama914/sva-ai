@@ -2,8 +2,8 @@ import crypto from "crypto";
 
 export type PaidPlan = "pro" | "ultra";
 
-// TEMPORARY LIVE PAYMENT TESTING PRICES
-// TODO: Revert Pro→499 and Ultra→999 after successful payment verification
+// TEMPORARY LIVE PAYMENT TEST PRICE - REVERT AFTER TESTING
+// TODO: Revert Pro to 499 and Ultra to 999 after successful payment verification.
 export const RAZORPAY_PLAN_PRICES: Record<PaidPlan, { amount: number; label: string; dailyLimit: number }> = {
   pro: { amount: 100, label: "SVA Pro", dailyLimit: 50 },
   ultra: { amount: 200, label: "SVA Ultra", dailyLimit: 150 }
