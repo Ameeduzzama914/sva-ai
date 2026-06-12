@@ -37,7 +37,7 @@ const plans: Plan[] = [
   {
     key: "pro",
     name: "Pro",
-    price: "₹499/month",
+    price: "₹1/month",
     description: "For deeper verification and advanced trust workflows.",
     features: ["50 verifications/day", "GPT + Gemini + DeepSeek", "Advanced trust scoring", "Deep evidence verification", "Enhanced contradiction analysis", "Faster verification speed", "Verification history"],
     chips: ["GPT", "Gemini", "DeepSeek"],
@@ -47,7 +47,7 @@ const plans: Plan[] = [
   {
     key: "ultra",
     name: "Ultra",
-    price: "₹999/month",
+    price: "₹2/month",
     description: "For power users who need higher daily verification capacity.",
     features: ["150 verifications/day", "Up to 4,500 verifications/month", "GPT + Gemini + DeepSeek", "Priority verification capacity", "Export-ready reports", "Advanced contradiction review", "Early access to premium verification tools"],
     chips: ["GPT", "Gemini", "DeepSeek"],
