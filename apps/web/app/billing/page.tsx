@@ -25,8 +25,8 @@ type PaymentRecord = {
 
 const planMeta: Record<UserPlan, { label: string; limit: number; price: string; description: string }> = {
   free: { label: "Free Beta", limit: 10, price: "₹0", description: "Explore trusted AI verification." },
-  pro: { label: "Pro", limit: 50, price: "₹499/month", description: "For deeper verification workflows." },
-  ultra: { label: "Ultra", limit: 150, price: "₹999/month", description: "For higher daily verification capacity." }
+  pro: { label: "Pro", limit: 50, price: "₹1/month", description: "For deeper verification workflows." },
+  ultra: { label: "Ultra", limit: 150, price: "₹2/month", description: "For higher daily verification capacity." }
 };
 
 export default function BillingPage() {
