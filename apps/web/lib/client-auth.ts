@@ -1,3 +1,5 @@
+import { getEffectivePlanForEmail } from "./founder-access";
+
 export type UserPlan = "free" | "pro" | "ultra";
 
 export type ClientSession = {
@@ -22,12 +24,13 @@ export const getSession = (): ClientSession | null => {
     const parsed = JSON.parse(raw) as Partial<ClientSession>;
     if (!parsed.email) return null;
     const parsedPlan = isUserPlan(parsed.plan) ? parsed.plan : "free";
-    const plan = parsedPlan === "free" || parsed.planVerified ? parsedPlan : "free";
+    const verifiedPlan = parsedPlan === "free" || parsed.planVerified ? parsedPlan : "free";
+    const plan = getEffectivePlanForEmail(parsed.email, verifiedPlan);
     return {
       email: parsed.email,
       plan,
       createdAt: parsed.createdAt ?? new Date().toISOString(),
-      planVerified: Boolean(parsed.planVerified)
+      planVerified: Boolean(parsed.planVerified) || plan === "ultra"
     };
   } catch {
     return null;
@@ -67,11 +70,11 @@ const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ?
 export const getUsage = (email: string, plan: ClientSession["plan"] = "free") => {
   const key = `${USAGE_KEY}_${email.toLowerCase()}_${new Date().toISOString().slice(0, 10)}`;
   const used = Number(localStorage.getItem(key) ?? "0");
-  const limit = getPlanLimit(plan);
+  const limit = getPlanLimit(getEffectivePlanForEmail(email, plan));
   return { used, limit, remaining: Math.max(0, limit - used), key };
 };
 
 export const incrementUsage = (email: string, plan: ClientSession["plan"] = "free") => {
-  const usage = getUsage(email, plan);
+  const usage = getUsage(email, getEffectivePlanForEmail(email, plan));
   localStorage.setItem(usage.key, String(usage.used + 1));
 };

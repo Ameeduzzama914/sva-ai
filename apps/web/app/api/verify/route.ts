@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { type VerificationMode, type VerificationUsageSummary, type VerifyApiError, type VerifyApiSuccess } from "../../../lib/models";
 import { getAuthenticatedUser } from "../../../lib/server/auth";
+import { isFounderEmail } from "../../../lib/founder-access";
 import { getPlanDailyVerificationLimit } from "../../../lib/server/plan-limits";
 import {
   appendHistoryForUser,
   consumeDailyVerificationQuota,
+  incrementUsageForToday,
   getVerificationCreditCost,
   trackEvent
 } from "../../../lib/server/store";
@@ -59,36 +61,52 @@ export async function POST(request: Request) {
       await trackEvent("verification_started", user.userId, { mode });
 
       creditsUsed = getVerificationCreditCost(mode);
-      const localQuota = await consumeDailyVerificationQuota(user.userId);
-
-      if (localQuota) {
-        const enforcedLimit = getPlanDailyVerificationLimit(localQuota.plan);
-        if (!localQuota.ok || localQuota.usedToday > enforcedLimit) {
+      const founderDailyLimit = getPlanDailyVerificationLimit("ultra");
+      const founderLocalUsage = isFounderEmail(user.email) ? await incrementUsageForToday(user.userId) : null;
+      if (founderLocalUsage) {
+        if (founderLocalUsage.usedToday > founderDailyLimit) {
           return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
         }
         usage = {
-          plan: localQuota.plan,
-          usedToday: localQuota.usedToday,
-          dailyLimit: enforcedLimit,
-          creditsRemaining: user.creditsRemaining
+          plan: "ultra",
+          usedToday: founderLocalUsage.usedToday,
+          dailyLimit: founderDailyLimit,
+          creditsRemaining: Math.max(user.creditsRemaining, founderDailyLimit)
         };
-      } else {
-        const supabaseQuota = await consumeSupabaseDailyVerificationQuota(user.userId, creditsUsed);
-        if (!supabaseQuota) {
-          return NextResponse.json({ ok: false, message: "Unable to verify usage quota. Please try again." } as VerifyApiError, { status: 503 });
-        }
+      }
 
-        const enforcedLimit = getPlanDailyVerificationLimit(supabaseQuota.plan);
-        if (!supabaseQuota.ok || supabaseQuota.usedToday > enforcedLimit) {
-          return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
-        }
+      if (!founderLocalUsage) {
+        const localQuota = await consumeDailyVerificationQuota(user.userId);
 
-        usage = {
-          plan: supabaseQuota.plan,
-          usedToday: supabaseQuota.usedToday,
-          dailyLimit: enforcedLimit,
-          creditsRemaining: supabaseQuota.creditsRemaining
-        };
+        if (localQuota) {
+          const enforcedLimit = getPlanDailyVerificationLimit(localQuota.plan);
+          if (!localQuota.ok || localQuota.usedToday > enforcedLimit) {
+            return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
+          }
+          usage = {
+            plan: localQuota.plan,
+            usedToday: localQuota.usedToday,
+            dailyLimit: enforcedLimit,
+            creditsRemaining: user.creditsRemaining
+          };
+        } else {
+          const supabaseQuota = await consumeSupabaseDailyVerificationQuota(user.userId, creditsUsed);
+          if (!supabaseQuota) {
+            return NextResponse.json({ ok: false, message: "Unable to verify usage quota. Please try again." } as VerifyApiError, { status: 503 });
+          }
+
+          const enforcedLimit = getPlanDailyVerificationLimit(supabaseQuota.plan);
+          if (!supabaseQuota.ok || supabaseQuota.usedToday > enforcedLimit) {
+            return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
+          }
+
+          usage = {
+            plan: supabaseQuota.plan,
+            usedToday: supabaseQuota.usedToday,
+            dailyLimit: enforcedLimit,
+            creditsRemaining: supabaseQuota.creditsRemaining
+          };
+        }
       }
     }
 
