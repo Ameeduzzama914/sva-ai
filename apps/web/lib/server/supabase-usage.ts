@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { UserPlan } from "./store";
 import { getPlanDailyVerificationLimit } from "./plan-limits";
 import { getSupabaseAdminClient } from "./supabase-admin";
+import { getEffectivePlanForEmail } from "../founder-access";
 
 type VerificationMode = "fast" | "deep" | "research";
 
@@ -29,7 +30,7 @@ export const consumeSupabaseDailyVerificationQuota = async (
 
   const { data: row, error: readError } = await client
     .from("sva_users")
-    .select("user_id, id, plan, usage_count, daily_usage, monthly_usage, credits_remaining")
+    .select("user_id, id, email, plan, usage_count, daily_usage, monthly_usage, credits_remaining")
     .or(`user_id.eq.${userId},id.eq.${userId}`)
     .maybeSingle();
 
@@ -39,10 +40,13 @@ export const consumeSupabaseDailyVerificationQuota = async (
   }
 
   const record = row as Row;
-  const plan = isUserPlan(record.plan) ? record.plan : "free";
+  const storedPlan = isUserPlan(record.plan) ? record.plan : "free";
+  const email = typeof record.email === "string" ? record.email : null;
+  const plan = getEffectivePlanForEmail(email, storedPlan) as UserPlan;
   const dailyLimit = getPlanDailyVerificationLimit(plan);
   const usedToday = pickNumber(record.daily_usage);
-  const creditsRemaining = pickNumber(record.credits_remaining, dailyLimit);
+  const storedCreditsRemaining = pickNumber(record.credits_remaining, dailyLimit);
+  const creditsRemaining = plan !== storedPlan ? Math.max(storedCreditsRemaining, dailyLimit) : storedCreditsRemaining;
 
   if (usedToday >= dailyLimit || creditsRemaining < creditsUsed) {
     return { ok: false, usedToday, dailyLimit, creditsRemaining, plan };

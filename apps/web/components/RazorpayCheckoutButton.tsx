@@ -60,8 +60,8 @@ type Props = {
 };
 
 const descriptions: Record<PaidPlan, string> = {
-  pro: "SVA Pro - 50 verifications/day",
-  ultra: "SVA Ultra - 150 verifications/day"
+  pro: "SVA Pro - ₹1/month - 50 verifications/day",
+  ultra: "SVA Ultra - ₹2/month - 150 verifications/day"
 };
 
 const loadRazorpayScript = async (): Promise<boolean> => {
