@@ -2,6 +2,8 @@ import type { PublicUser, UserPlan } from "./store";
 import { getPlanDailyVerificationLimit } from "./plan-limits";
 import { getSupabaseAdminClient } from "./supabase-admin";
 
+const FOUNDER_EMAIL = "mohammed.ameeduzzama@gmail.com";
+
 type Row = Record<string, unknown>;
 
 const isUserPlan = (value: unknown): value is UserPlan =>
@@ -44,8 +46,14 @@ const mapPublicUserRow = (row: Row): PublicUser | null => {
   const email = pickString(row, ["email"]).trim().toLowerCase();
   if (!email) return null;
 
-  const rawPlan = pickString(row, ["plan"]) || "free";
-  const plan = isUserPlan(rawPlan) ? rawPlan : "free";
+const rawPlan = pickString(row, ["plan"]) || "free";
+
+const plan: UserPlan =
+  email === FOUNDER_EMAIL
+    ? "ultra"
+    : isUserPlan(rawPlan)
+      ? rawPlan
+      : "free";
   const dailyLimit = getPlanDailyVerificationLimit(plan);
   const usedToday = pickNumber(row, ["daily_usage", "dailyUsage", "usage_today"]);
 
