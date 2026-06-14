@@ -32,11 +32,12 @@ const sections = [
   },
   {
     title: "Contact",
-    body: "For privacy or support questions, contact support will be added before public launch."
+    body: "For privacy or support questions, contact:
+mohammed.ameeduzzama@gmail.com"
   },
   {
     title: "Last updated",
-    body: "June 4, 2026"
+    body: "June 14, 2026"
   }
 ];
 
