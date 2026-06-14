@@ -32,8 +32,7 @@ const sections = [
   },
   {
     title: "Contact",
-    body: "For privacy or support questions, contact:
-mohammed.ameeduzzama@gmail.com"
+    body: "For privacy or support questions, contact: mohammed.ameeduzzama@gmail.com"
   },
   {
     title: "Last updated",
