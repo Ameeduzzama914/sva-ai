@@ -2,6 +2,86 @@
   "users": [],
   "analytics": [
     {
+      "id": "65fcec05-1921-40d9-846e-359f4a015793",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-05T13:44:07.725Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 68,
+        "verdict": "mixed_evidence"
+      }
+    },
+    {
+      "id": "efc026dd-1f78-46e2-9ebe-5e4f6c2e63f9",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-05T13:44:02.025Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "1a87d739-b00e-4af2-b900-95a2a5c2381b",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-06-04T13:25:21.232Z",
+      "metadata": {
+        "plan": "ultra",
+        "mode": "test_dev"
+      }
+    },
+    {
+      "id": "a2970dc8-9d9b-4938-b7c2-99774ddf1b94",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-04T13:23:54.643Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 83,
+        "verdict": "mostly_supported"
+      }
+    },
+    {
+      "id": "c4977a57-e3e3-435e-b2b7-2508aca6e38d",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-04T13:23:50.096Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
+      "id": "d6592fe7-0812-4299-81e1-854e32ea217b",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "upgraded_to_pro",
+      "timestamp": "2026-06-04T13:23:35.515Z",
+      "metadata": {
+        "plan": "ultra",
+        "mode": "test_dev"
+      }
+    },
+    {
+      "id": "d97bfe1c-add8-4bc8-beca-380d022851bb",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_completed",
+      "timestamp": "2026-06-04T13:20:58.028Z",
+      "metadata": {
+        "mode": "deep",
+        "confidence": 88,
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "b58388cb-5be0-4df9-88d0-bf644df1571e",
+      "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
+      "event": "verification_started",
+      "timestamp": "2026-06-04T13:20:51.835Z",
+      "metadata": {
+        "mode": "deep"
+      }
+    },
+    {
       "id": "1f1983fb-f5b7-4722-8119-dbb4d4190fe5",
       "userId": "18bd87ff-fb36-4f0f-afe9-c5310d3cfc16",
       "event": "verification_completed",
