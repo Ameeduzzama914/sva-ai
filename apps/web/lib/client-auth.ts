@@ -60,7 +60,7 @@ export const clearPlanIntent = () => localStorage.removeItem(PLAN_INTENT_KEY);
 export const signupUser = (email: string, password: string): { ok: boolean; message?: string } => {
   const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: UserPlan }>;
   if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: "Account already exists." };
-  users.push({ email, password, plan: "free" });
+  users.push({ email, password, plan: getSession()?.plan ?? "free" });
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
   return { ok: true };
 };
@@ -71,7 +71,7 @@ export const loginUser = (email: string, password: string): { ok: boolean; plan?
  return user
   ? {
       ok: true,
-      plan: isFounderEmail(email) ? "ultra" : "free"
+      plan: isFounderEmail(email) ? "ultra" : user.plan
     }
   : {
       ok: false,
