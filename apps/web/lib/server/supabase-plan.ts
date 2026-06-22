@@ -79,25 +79,31 @@ export const updateSupabasePaidPlanByEmail = async (email: string, plan: Exclude
   if (!client || !normalizedEmail) return null;
 
   const dailyLimit = getPlanDailyVerificationLimit(plan);
+
+  const payload = {
+    email: normalizedEmail,
+    plan,
+    daily_limit: dailyLimit,
+    credits_remaining: dailyLimit,
+    credits_reset_at: nextResetAt(plan),
+    daily_usage: 0,
+    monthly_usage: 0,
+    status: "active",
+    updated_at: new Date().toISOString()
+  };
+
   const { data, error } = await client
     .from("sva_users")
-    .update({
-      plan,
-      daily_limit: dailyLimit,
-      credits_remaining: dailyLimit,
-      credits_reset_at: nextResetAt(plan),
-      daily_usage: 0,
-      monthly_usage: 0,
-      updated_at: new Date().toISOString()
+    .upsert(payload, {
+      onConflict: "email"
     })
-    .ilike("email", normalizedEmail)
     .select("*")
-    .maybeSingle();
+    .single();
 
   if (error) {
-    console.error("[supabase-plan] update paid plan:", error.message);
+    console.error("[supabase-plan] upsert paid plan:", error.message);
     return null;
   }
 
-  return data ? mapPublicUserRow(data as Row) : null;
+  return mapPublicUserRow(data as Row);
 };
