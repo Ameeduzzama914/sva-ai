@@ -58,6 +58,7 @@ type AppStore = {
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
+const IS_VERCEL = process.env.VERCEL === "1";
 
 const defaultStore: AppStore = { users: [], analytics: [] };
 let writeQueue: Promise<void> = Promise.resolve();
@@ -103,6 +104,8 @@ const readStore = async (): Promise<AppStore> => {
 };
 
 const saveStore = async (store: AppStore): Promise<void> => {
+  if (process.env.VERCEL === "1") return;
+
   await ensureStore();
   await writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
 };
