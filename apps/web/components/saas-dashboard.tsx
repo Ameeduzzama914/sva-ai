@@ -117,7 +117,9 @@ export const SaasDashboard = () => {
       if (data.usage?.plan) {
         setDisplayPlan(data.usage.plan);
       }
-      if (session) incrementUsage(session.email, displayPlan);
+      if (session && data.usage?.plan) {
+  incrementUsage(session.email, data.usage.plan);
+      }
     } catch {
       setErrorMessage("Verification request failed. Please try again.");
     } finally {
