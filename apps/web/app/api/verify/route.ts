@@ -59,40 +59,31 @@ export async function POST(request: Request) {
       await trackEvent("verification_started", user.userId, { mode });
 
       creditsUsed = getVerificationCreditCost(mode);
-      const localQuota = await consumeDailyVerificationQuota(user.userId);
 
-      if (localQuota) {
-        const enforcedLimit = getPlanDailyVerificationLimit(localQuota.plan);
-        if (!localQuota.ok || localQuota.usedToday > enforcedLimit) {
-          return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
-        }
-        usage = {
-          plan: localQuota.plan,
-          usedToday: localQuota.usedToday,
-          dailyLimit: enforcedLimit,
-          creditsRemaining: user.creditsRemaining
-        };
-      } else {
-        const supabaseQuota = await consumeSupabaseDailyVerificationQuota(user.userId, creditsUsed);
-        if (!supabaseQuota) {
-          return NextResponse.json({ ok: false, message: "Unable to verify usage quota. Please try again." } as VerifyApiError, { status: 503 });
-        }
+const supabaseQuota = await consumeSupabaseDailyVerificationQuota(user.userId, creditsUsed);
+if (!supabaseQuota) {
+  return NextResponse.json(
+    { ok: false, message: "Unable to verify usage quota. Please try again." } as VerifyApiError,
+    { status: 503 }
+  );
+}
 
-        const enforcedLimit = getPlanDailyVerificationLimit(supabaseQuota.plan);
-        if (!supabaseQuota.ok || supabaseQuota.usedToday > enforcedLimit) {
-          return NextResponse.json({ ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError, { status: 403 });
-        }
+const enforcedLimit = getPlanDailyVerificationLimit(supabaseQuota.plan);
+if (!supabaseQuota.ok || supabaseQuota.usedToday > enforcedLimit) {
+  return NextResponse.json(
+    { ok: false, message: "Verification limit exceeded. Upgrade your plan or wait for reset." } as VerifyApiError,
+    { status: 403 }
+  );
+}
 
-        usage = {
-          plan: supabaseQuota.plan,
-          usedToday: supabaseQuota.usedToday,
-          dailyLimit: enforcedLimit,
-          creditsRemaining: supabaseQuota.creditsRemaining
-        };
-      }
-    }
+usage = {
+  plan: supabaseQuota.plan,
+  usedToday: supabaseQuota.usedToday,
+  dailyLimit: enforcedLimit,
+  creditsRemaining: supabaseQuota.creditsRemaining
+};
 
-    const verificationPlan = user?.plan ?? "free";
+    const verificationPlan = supabaseQuota.plan;
     const providerFlow = await withTimeout(buildResponsesForPrompt(prompt, mode, verificationPlan), 18000);
     const safeEvidenceSnippets = providerFlow.evidenceSnippets;
     const validResponses = providerFlow.responses.filter((response) => response.answer && response.answer.trim().length > 0);
@@ -158,6 +149,7 @@ export async function POST(request: Request) {
     };
 
     return NextResponse.json(payload, { status: 200 });
+}
   } catch (error) {
     console.error("Verification pipeline failed.", {
       message: error instanceof Error ? error.message : "Unknown error"
