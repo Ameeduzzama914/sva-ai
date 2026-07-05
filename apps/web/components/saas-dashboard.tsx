@@ -1,14 +1,9 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppSidebar } from "./app-sidebar";
-import { DashboardHeader } from "./dashboard-header";
-import { EvidenceCard, getLinkedClaimsCount } from "./evidence-card";
-import { FeedbackSection } from "./feedback-section";
-import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { ProviderLogo } from "./provider-logo";
 import {
   type EvidenceSnippet,
@@ -22,43 +17,771 @@ import {
   type VerifyApiResponse
 } from "../lib/models";
 import { getModelLayerConfig } from "../lib/model-layer";
+import {
+  getCanonicalTrustScore,
+  getCanonicalVerifiedAnswer,
+  getContradictionRisk,
+  getEvidenceDirection,
+  getMeaningfulCaveats,
+  getMeaningfulText,
+  getReliabilityLabel
+} from "../lib/result-presentation";
 import type { ProviderStatus } from "../lib/server/provider-status";
 import type { UserPlan } from "../lib/server/store";
 import { getSession, getSessionHeaders, getUsage, incrementUsage, logout, setSession } from "../lib/client-auth";
 
 const visibleModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
 
+type HistoryItem = {
+  prompt: string;
+  mode: VerificationMode;
+  resultSummary: string;
+  timestamp: string;
+  confidence: number;
+  verdict: string;
+};
+
+type PipelineState = "pending" | "active" | "complete" | "failed" | "unavailable";
+
+type PipelineStage = {
+  label: string;
+  state: PipelineState;
+};
+
+const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
+
 const isLiveModelResponse = (source?: PerModelSource) => source?.fallbackState === "none";
 
 const proProviderConfigured = (model: ModelName, status: ProviderStatus): boolean => {
   const configured = status.proProvidersConfigured;
-  if (!configured) {
-    return false;
-  }
-  if (model === "Fast AI") {
-    return configured.openai;
-  }
-  if (model === "Balanced AI") {
-    return configured.gemini;
-  }
+  if (!configured) return false;
+  if (model === "Fast AI") return configured.openai;
+  if (model === "Balanced AI") return configured.gemini;
   return configured.deepseek;
 };
 
-const statusStyle: Record<string, string> = {
-  strongly_supported: "bg-emerald-400/25 text-emerald-200 border-emerald-400/40",
-  supported: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  mostly_supported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-  mixed_evidence: "bg-amber-600/20 text-amber-200 border-amber-600/40",
-  misleading: "bg-orange-600/20 text-orange-200 border-orange-600/40",
-  contradicted: "bg-rose-500/20 text-rose-300 border-rose-500/40",
-  false_premise: "bg-fuchsia-600/20 text-fuchsia-200 border-fuchsia-600/40",
-  insufficient_evidence: "bg-slate-500/20 text-slate-300 border-slate-500/40"
+const formatRelativeTime = (value: string) => {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "";
+  const minutes = Math.max(1, Math.round((Date.now() - timestamp) / 60000));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 };
+
+const getSourceScore = (snippet: EvidenceSnippet): number => snippet.credibilityScore ?? snippet.sourceQualityScore ?? snippet.domainTrustScore ?? 0;
+
+const getProviderAvailabilityLabel = (model: ModelName, status: ProviderStatus | null, runtime?: RuntimeProviderStatus | null) => {
+  if (runtime) {
+    if (runtime.liveSuccess) return "Live response";
+    if (runtime.status === "timeout") return "Timed out";
+    return runtime.errorMessage ? "Request issue" : "Unavailable";
+  }
+  if (!status) return "Checking";
+  if (status.modelLayer === "pro") return proProviderConfigured(model, status) ? "Configured" : "Not configured";
+  return status.openrouterConfigured ? "Configured" : "Not configured";
+};
+
+const getModelStatus = ({
+  hasRun,
+  isLoading,
+  isSuccess,
+  isMajority,
+  isOutlier,
+  runtime
+}: {
+  hasRun: boolean;
+  isLoading: boolean;
+  isSuccess: boolean;
+  isMajority: boolean;
+  isOutlier: boolean;
+  runtime?: RuntimeProviderStatus | null;
+}) => {
+  if (isLoading) return { label: "Pending", tone: "cyan" as const };
+  if (!hasRun) return { label: "Ready", tone: "neutral" as const };
+  if (!isSuccess) return { label: runtime?.status === "timeout" ? "Timed Out" : "Unavailable", tone: "danger" as const };
+  if (isOutlier) return { label: "Differs", tone: "warning" as const };
+  if (isMajority) return { label: "Agrees", tone: "success" as const };
+  return { label: "Available", tone: "success" as const };
+};
+
+const getPipelineStages = ({
+  isLoading,
+  hasRun,
+  errorMessage,
+  verification,
+  evidenceCount
+}: {
+  isLoading: boolean;
+  hasRun: boolean;
+  errorMessage: string | null;
+  verification: VerificationResult | null;
+  evidenceCount: number;
+}): PipelineStage[] => {
+  if (errorMessage) {
+    return [
+      { label: "Understanding question", state: "complete" },
+      { label: "Asking AI models", state: "failed" },
+      { label: "Comparing responses", state: "unavailable" },
+      { label: "Detecting contradictions", state: "unavailable" },
+      { label: "Evaluating evidence", state: "unavailable" },
+      { label: "Calculating trust score", state: "unavailable" }
+    ];
+  }
+
+  if (isLoading) {
+    return [
+      { label: "Understanding question", state: "complete" },
+      { label: "Asking AI models", state: "active" },
+      { label: "Comparing responses", state: "pending" },
+      { label: "Detecting contradictions", state: "pending" },
+      { label: "Evaluating evidence", state: "pending" },
+      { label: "Calculating trust score", state: "pending" }
+    ];
+  }
+
+  if (verification) {
+    return [
+      { label: "Understanding question", state: "complete" },
+      { label: "Asking AI models", state: "complete" },
+      { label: "Comparing responses", state: "complete" },
+      { label: "Detecting contradictions", state: verification.contradictionScore !== undefined ? "complete" : "unavailable" },
+      { label: "Evaluating evidence", state: evidenceCount > 0 ? "complete" : "unavailable" },
+      { label: "Calculating trust score", state: "complete" }
+    ];
+  }
+
+  return [
+    { label: "Understanding question", state: hasRun ? "complete" : "pending" },
+    { label: "Asking AI models", state: "pending" },
+    { label: "Comparing responses", state: "pending" },
+    { label: "Detecting contradictions", state: "pending" },
+    { label: "Evaluating evidence", state: "pending" },
+    { label: "Calculating trust score", state: "pending" }
+  ];
+};
+
+const ShellPanel = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
+  <section className={cx("rounded-[22px] border border-white/[0.08] bg-white/[0.035] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)] backdrop-blur-xl sm:p-5", className)}>
+    {children}
+  </section>
+);
+
+const SectionHeader = ({ label, title, subtitle }: { label?: string; title: string; subtitle?: string }) => (
+  <div>
+    {label ? <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200/75">{label}</p> : null}
+    <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">{title}</h2>
+    {subtitle ? <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">{subtitle}</p> : null}
+  </div>
+);
+
+const AppNavigation = ({
+  email,
+  plan,
+  remaining,
+  limit,
+  history,
+  onHistorySelect,
+  onLogout,
+  onNewVerification
+}: {
+  email?: string;
+  plan: UserPlan;
+  remaining: number;
+  limit: number;
+  history: HistoryItem[];
+  onHistorySelect: (prompt: string) => void;
+  onLogout: () => void;
+  onNewVerification: () => void;
+}) => {
+  const navItems = ["Home", "History", "Saved", "Reports", "Settings"];
+  return (
+    <aside className="hidden min-h-screen w-[292px] shrink-0 border-r border-white/[0.07] bg-[#05070A]/95 px-4 py-5 lg:block">
+      <div className="flex items-center gap-3">
+        <div className="grid h-11 w-11 place-items-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-sm font-semibold text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.12)]">
+          SVA
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-white">SVA</p>
+          <p className="text-xs text-slate-500">Super Verified AI</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onNewVerification}
+        className="mt-7 flex min-h-11 w-full items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-300/10 px-4 text-sm font-semibold text-emerald-100 transition hover:border-emerald-200 hover:bg-emerald-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50"
+      >
+        + New Verification
+      </button>
+
+      <nav className="mt-7 space-y-1" aria-label="Primary navigation">
+        {navItems.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={cx(
+              "flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40",
+              item === "Home" ? "border border-white/[0.08] bg-white/[0.055] text-white" : "text-slate-400 hover:bg-white/[0.045] hover:text-slate-100"
+            )}
+          >
+            <span>{item}</span>
+            {item !== "Home" ? <span className="text-[10px] uppercase tracking-[0.14em] text-slate-600">Soon</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <div className="mt-8">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Recent verifications</p>
+        <div className="mt-3 space-y-2">
+          {history.slice(0, 5).length ? (
+            history.slice(0, 5).map((item) => (
+              <button
+                key={`${item.timestamp}-${item.prompt}`}
+                type="button"
+                onClick={() => onHistorySelect(item.prompt)}
+                className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-left transition hover:border-white/[0.12] hover:bg-white/[0.045] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40"
+              >
+                <p className="line-clamp-2 text-sm leading-5 text-slate-200">{item.prompt}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatRelativeTime(item.timestamp)}</p>
+              </button>
+            ))
+          ) : (
+            <p className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-xs leading-5 text-slate-500">
+              No saved history yet.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-[22px] border border-white/[0.08] bg-white/[0.035] p-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.08] text-xs font-semibold text-slate-100">
+            {(email?.[0] ?? "G").toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">{email ?? "Guest session"}</p>
+            <p className="text-xs text-slate-500">{plan.toUpperCase()} plan</p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-slate-400">
+            <span>Daily verification</span>
+            <span>{remaining}/{limit}</span>
+          </div>
+          <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]">
+            <div className="h-1.5 rounded-full bg-emerald-300" style={{ width: `${Math.min(100, (remaining / Math.max(limit, 1)) * 100)}%` }} />
+          </div>
+        </div>
+        <button type="button" onClick={onLogout} className="mt-4 text-sm text-slate-400 transition hover:text-white">
+          Logout
+        </button>
+      </div>
+    </aside>
+  );
+};
+
+const MobileAppBar = ({
+  plan,
+  onNewVerification,
+  onLogout
+}: {
+  plan: UserPlan;
+  onNewVerification: () => void;
+  onLogout: () => void;
+}) => (
+  <div className="sticky top-0 z-30 -mx-3 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-[#05070A]/95 px-3 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:hidden">
+    <div className="flex items-center gap-2">
+      <div className="grid h-9 w-9 place-items-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-xs font-semibold text-emerald-100">
+        SVA
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-white">SVA</p>
+        <p className="text-[11px] text-slate-500">{plan.toUpperCase()} plan</p>
+      </div>
+    </div>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onNewVerification}
+        className="rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs font-semibold text-slate-200"
+      >
+        New
+      </button>
+      <a className="rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs font-semibold text-slate-200" href="/billing">
+        Billing
+      </a>
+      <button
+        type="button"
+        onClick={onLogout}
+        className="rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs font-semibold text-slate-200"
+      >
+        Logout
+      </button>
+    </div>
+  </div>
+);
+
+const TopStatusBar = ({
+  isLoading,
+  verification,
+  errorMessage,
+  warnings,
+  providerStatus,
+  liveSuccessCount,
+  plan,
+  remaining,
+  limit
+}: {
+  isLoading: boolean;
+  verification: VerificationResult | null;
+  errorMessage: string | null;
+  warnings: string[];
+  providerStatus: ProviderStatus | null;
+  liveSuccessCount: number | null;
+  plan: UserPlan;
+  remaining: number;
+  limit: number;
+}) => {
+  const label = errorMessage
+    ? "Verification could not be completed"
+    : isLoading
+      ? "SVA is verifying across available AI models"
+      : verification
+        ? warnings.length
+          ? "Verification completed with limited coverage"
+          : "Verification complete"
+        : "Ready to verify";
+
+  return (
+    <header className="sticky top-[65px] z-20 -mx-3 border-b border-white/[0.06] bg-[#05070A]/90 px-3 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:top-0">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={cx("h-2.5 w-2.5 rounded-full", errorMessage ? "bg-rose-400" : isLoading ? "animate-pulse bg-cyan-300" : verification ? "bg-emerald-300" : "bg-slate-500")} />
+          <p className="text-sm text-slate-200">{label}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="neutral">{plan.toUpperCase()}</Badge>
+          <Badge variant={remaining <= 0 ? "danger" : "success"}>{remaining}/{limit} left</Badge>
+          {providerStatus ? (
+            <Badge variant={liveSuccessCount === null ? "cyan" : liveSuccessCount >= 2 ? "success" : "warning"}>
+              {liveSuccessCount === null ? `${providerStatus.liveProviderCount}/3 configured` : `${liveSuccessCount}/3 live`}
+            </Badge>
+          ) : null}
+        </div>
+      </div>
+    </header>
+  );
+};
+
+const EmptyVerificationState = ({ onSelectPrompt }: { onSelectPrompt: (prompt: string) => void }) => {
+  const examples = [
+    "Is this news claim true?",
+    "Compare these two explanations.",
+    "Verify this health claim.",
+    "Check whether this investment claim is supported.",
+    "Explain where AI models disagree."
+  ];
+
+  return (
+    <ShellPanel className="flex min-h-[360px] flex-col items-center justify-center text-center">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200/80">Verification intelligence</p>
+      <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">Ask anything you want to verify.</h1>
+      <p className="mt-4 max-w-2xl text-base leading-7 text-slate-400">
+        SVA compares multiple AI perspectives, detects disagreement, and helps you understand how much confidence to place in an answer.
+      </p>
+      <div className="mt-8 flex max-w-3xl flex-wrap justify-center gap-2">
+        {examples.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => onSelectPrompt(example)}
+            className="rounded-full border border-white/[0.08] bg-white/[0.035] px-4 py-2 text-sm text-slate-300 transition hover:border-emerald-300/30 hover:bg-emerald-300/10 hover:text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+    </ShellPanel>
+  );
+};
+
+const VerificationComposer = ({
+  prompt,
+  mode,
+  isLoading,
+  disabled,
+  onPromptChange,
+  onModeChange,
+  onSubmit
+}: {
+  prompt: string;
+  mode: VerificationMode;
+  isLoading: boolean;
+  disabled: boolean;
+  onPromptChange: (value: string) => void;
+  onModeChange: (mode: VerificationMode) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) => (
+  <ShellPanel className="border-emerald-300/10">
+    <form onSubmit={onSubmit}>
+      <label htmlFor="verification-prompt" className="sr-only">
+        Ask anything to verify
+      </label>
+      <textarea
+        id="verification-prompt"
+        value={prompt}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onPromptChange(event.target.value)}
+        placeholder="Ask anything to verify..."
+        required
+        className="min-h-32 w-full resize-y rounded-[20px] border border-white/[0.08] bg-[#080B10] px-4 py-4 text-base leading-7 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-emerald-300/40 focus:ring-2 focus:ring-emerald-300/10"
+      />
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-2xl border border-white/[0.08] bg-white/[0.025] p-1">
+          {(["fast", "deep", "research"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onModeChange(option)}
+              className={cx(
+                "rounded-xl px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40",
+                mode === option ? "bg-white/[0.08] text-white" : "text-slate-500 hover:text-slate-200"
+              )}
+            >
+              {option === "fast" ? "Fast" : option === "deep" ? "Deep" : "Research"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="hidden text-xs text-slate-500 sm:block">SVA can make mistakes. Verify critical information.</p>
+          <Button type="submit" variant="primary" disabled={isLoading || disabled || !prompt.trim()} className="rounded-full bg-emerald-400 text-slate-950">
+            {isLoading ? "Verifying" : disabled ? "Limit Reached" : "Send"}
+          </Button>
+        </div>
+      </div>
+    </form>
+  </ShellPanel>
+);
+
+const VerificationPipeline = ({ stages }: { stages: PipelineStage[] }) => {
+  const tone: Record<PipelineState, string> = {
+    complete: "border-emerald-300/50 bg-emerald-300/10 text-emerald-100",
+    active: "border-cyan-300/50 bg-cyan-300/10 text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.12)]",
+    pending: "border-white/[0.08] bg-white/[0.025] text-slate-500",
+    failed: "border-rose-300/50 bg-rose-300/10 text-rose-100",
+    unavailable: "border-white/[0.06] bg-white/[0.015] text-slate-600"
+  };
+
+  return (
+    <ShellPanel>
+      <SectionHeader label="Pipeline" title="Verification Pipeline" subtitle="A transparent view of the current verification path. Completion reflects only the data SVA actually received." />
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        {stages.map((stage, index) => (
+          <div key={stage.label} className={cx("relative rounded-2xl border p-3 transition", tone[stage.state])}>
+            <div className="flex items-center justify-between">
+              <span className="grid h-7 w-7 place-items-center rounded-full border border-current/25 text-xs">{index + 1}</span>
+              <span className="text-[10px] uppercase tracking-[0.14em] opacity-70">{stage.state}</span>
+            </div>
+            <p className="mt-3 min-h-10 text-sm leading-5">{stage.label}</p>
+          </div>
+        ))}
+      </div>
+    </ShellPanel>
+  );
+};
+
+const QueryCard = ({ prompt, hasRun }: { prompt: string; hasRun: boolean }) => (
+  <ShellPanel className={hasRun ? "" : "hidden"}>
+    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Question submitted</p>
+    <p className="mt-2 text-xl leading-8 text-slate-100">{prompt}</p>
+  </ShellPanel>
+);
+
+const TrustScorePanel = ({ verification, trustScore, trustLabel }: { verification: VerificationResult | null; trustScore: number; trustLabel: string }) => {
+  const metrics = verification
+    ? [
+        ["Model Agreement", verification.agreementScore],
+        ["Evidence Strength", verification.evidenceAlignmentScore],
+        ["Source Quality", verification.sourceQualityScore],
+        ["Consistency", Math.max(0, 100 - (verification.contradictionScore ?? 0))],
+        ["Claim Coverage", verification.claimCoverageScore]
+      ].filter((item): item is [string, number] => typeof item[1] === "number" && Number.isFinite(item[1]))
+    : [];
+
+  return (
+    <ShellPanel>
+      <SectionHeader label="Trust" title="SVA Trust Score" subtitle={verification ? "Calculated from the available model, claim, contradiction, and evidence fields." : "Trust Score Pending"} />
+      <div className="mt-6 flex items-center gap-5">
+        <div
+          className="grid h-32 w-32 shrink-0 place-items-center rounded-full p-1"
+          style={{ background: verification ? `conic-gradient(#34d399 ${trustScore * 3.6}deg, rgba(255,255,255,0.07) 0deg)` : "rgba(255,255,255,0.06)" }}
+        >
+          <div className="grid h-full w-full place-items-center rounded-full bg-[#05070A]">
+            <div className="text-center">
+              <p className="text-3xl font-semibold text-white">{verification ? trustScore : "--"}</p>
+              <p className="text-xs text-slate-500">/100</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-white">{verification ? trustLabel : "Trust Score Pending"}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            {verification ? "Why this score? SVA weighs model agreement, evidence alignment, source quality, contradiction impact, and claim coverage when those fields are present." : "Score explanation will appear after verification completes."}
+          </p>
+        </div>
+      </div>
+      <div className="mt-6 space-y-3">
+        {metrics.length ? (
+          metrics.map(([label, value]) => (
+            <div key={label}>
+              <div className="mb-1 flex justify-between text-xs text-slate-400">
+                <span>{label}</span>
+                <span>{Math.round(value)}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-white/[0.06]">
+                <div className="h-1.5 rounded-full bg-emerald-300" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-sm text-slate-500">Trust breakdown unavailable until SVA receives verification data.</p>
+        )}
+      </div>
+    </ShellPanel>
+  );
+};
+
+const VerifiedAnswerCard = ({
+  verification,
+  trustScore,
+  canonicalAnswer,
+  actionMessage,
+  onCopy,
+  onExport,
+  onShare
+}: {
+  verification: VerificationResult | null;
+  trustScore: number;
+  canonicalAnswer: string;
+  actionMessage: string | null;
+  onCopy: () => void;
+  onExport: () => void;
+  onShare: () => void;
+}) => {
+  const answer = getMeaningfulText(verification?.sections?.coreConclusion) || getMeaningfulText(verification?.finalAnswer);
+  const evidence = getMeaningfulText(verification?.sections?.evidenceSummary);
+  const caveats = getMeaningfulCaveats(verification);
+  const contradictions = getMeaningfulText(verification?.sections?.contradictions);
+
+  return (
+    <ShellPanel className="border-emerald-300/20">
+      <SectionHeader label="Verified Answer" title={verification ? getReliabilityLabel(trustScore) : "Verification Unavailable"} subtitle={verification ? "Final synthesis generated from real returned verification data." : "Run a verification to generate an answer."} />
+      {verification ? (
+        <div className="mt-5 space-y-4">
+          <div className="rounded-[20px] border border-white/[0.08] bg-[#080B10] p-5">
+            <p className="text-base leading-8 text-slate-100 whitespace-pre-line">{answer || canonicalAnswer || "Model response unavailable."}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Verdict</p>
+              <p className="mt-1 text-sm font-semibold text-white">{verification.judgeVerdict?.replace(/_/g, " ").toUpperCase() ?? "NEEDS REVIEW"}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Evidence</p>
+              <p className="mt-1 text-sm font-semibold text-white">{getEvidenceDirection(verification)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Contradiction</p>
+              <p className="mt-1 text-sm font-semibold text-white">{getContradictionRisk(verification)}</p>
+            </div>
+          </div>
+          {evidence ? <details className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4" open><summary className="cursor-pointer text-sm font-semibold text-slate-100">Evidence summary</summary><p className="mt-3 text-sm leading-6 text-slate-400">{evidence}</p></details> : null}
+          {caveats ? <details className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4"><summary className="cursor-pointer text-sm font-semibold text-amber-100">Limitations</summary><p className="mt-3 text-sm leading-6 text-amber-50/80">{caveats}</p></details> : null}
+          {contradictions ? <details className="rounded-2xl border border-rose-300/20 bg-rose-300/10 p-4"><summary className="cursor-pointer text-sm font-semibold text-rose-100">Contradiction details</summary><p className="mt-3 text-sm leading-6 text-rose-50/80">{contradictions}</p></details> : null}
+        </div>
+      ) : (
+        <p className="mt-5 rounded-[20px] border border-white/[0.07] bg-white/[0.025] p-5 text-sm leading-6 text-slate-500">Verification unavailable. The verified answer will appear after SVA receives enough model responses.</p>
+      )}
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button type="button" variant="primary" onClick={onCopy} disabled={!verification}>
+          Copy Answer
+        </Button>
+        <Button type="button" onClick={onShare} disabled={!verification}>
+          Share
+        </Button>
+        <Button type="button" variant="ghost" onClick={onExport} disabled={!verification}>
+          Download Report
+        </Button>
+      </div>
+      {actionMessage ? <p className="mt-3 text-xs text-emerald-200">{actionMessage}</p> : null}
+    </ShellPanel>
+  );
+};
+
+const ModelAgreementSection = ({
+  responses,
+  sourceMap,
+  runtimeProviderStatus,
+  providerStatus,
+  modelLayer,
+  verification,
+  hasRunVerification,
+  isLoading
+}: {
+  responses: ModelResponse[];
+  sourceMap: Map<ModelName, PerModelSource>;
+  runtimeProviderStatus: Record<ModelName, RuntimeProviderStatus> | null;
+  providerStatus: ProviderStatus | null;
+  modelLayer: ReturnType<typeof getModelLayerConfig>;
+  verification: VerificationResult | null;
+  hasRunVerification: boolean;
+  isLoading: boolean;
+}) => {
+  const liveCount = visibleModels.filter((model) => isLiveModelResponse(sourceMap.get(model))).length;
+
+  return (
+    <ShellPanel>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHeader label="Consensus" title="Model Agreement" subtitle={verification ? `${verification.majorityModels.length} agree, ${verification.outlierModels.length} differ.` : "Provider responses will appear as verification data becomes available."} />
+        {hasRunVerification ? <Badge variant={liveCount >= 2 ? "success" : "warning"}>{liveCount}/3 responded</Badge> : null}
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {visibleModels.map((model) => {
+          const provider = modelLayer.providerMeta[model];
+          const source = sourceMap.get(model);
+          const runtime = runtimeProviderStatus?.[model] ?? null;
+          const response = responses.find((item) => item.model === model);
+          const isSuccess = isLiveModelResponse(source);
+          const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
+          const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
+          const status = getModelStatus({ hasRun: hasRunVerification, isLoading, isSuccess, isMajority, isOutlier, runtime });
+          return (
+            <article key={model} className="rounded-[20px] border border-white/[0.08] bg-[#080B10] p-4 transition hover:border-white/[0.14]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <ProviderLogo provider={provider.logoProvider} size="lg" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{provider.brand}</p>
+                    <p className="text-xs text-slate-500">{model} / {provider.badgeLabel}</p>
+                  </div>
+                </div>
+                <Badge variant={status.tone}>{status.label}</Badge>
+              </div>
+              <p className="mt-4 line-clamp-5 min-h-[100px] text-sm leading-6 text-slate-400">
+                {isLoading
+                  ? "Waiting for model response..."
+                  : !hasRunVerification
+                    ? "Ready to participate in verification."
+                    : isSuccess
+                      ? response?.answer ?? "Model response unavailable."
+                      : "Model response unavailable."}
+              </p>
+              <p className="mt-3 text-xs text-slate-600">{getProviderAvailabilityLabel(model, providerStatus, runtime)}</p>
+            </article>
+          );
+        })}
+      </div>
+    </ShellPanel>
+  );
+};
+
+const EvidencePanel = ({ evidenceSnippets, meta, isLoading }: { evidenceSnippets: EvidenceSnippet[]; meta: VerificationExecutionMeta | null; isLoading: boolean }) => {
+  const sorted = [...evidenceSnippets].sort((a, b) => getSourceScore(b) - getSourceScore(a));
+
+  return (
+    <ShellPanel>
+      <SectionHeader label="Evidence" title="Evidence Used" subtitle={evidenceSnippets.length ? `${evidenceSnippets.length} returned sources. Retrieval mode: ${meta?.retrievalModeUsed ?? "web"}.` : undefined} />
+      <div className="mt-5 space-y-3">
+        {isLoading ? (
+          <p className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm text-cyan-100">Evidence analysis is still processing.</p>
+        ) : sorted.length ? (
+          sorted.slice(0, 8).map((snippet, index) => (
+            <article key={`${snippet.title}-${index}`} className="rounded-[18px] border border-white/[0.07] bg-[#080B10] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">{snippet.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{snippet.sourceDomain ?? snippet.sourceType}{snippet.trustTier ? ` / ${snippet.trustTier}` : ""}</p>
+                </div>
+                {getSourceScore(snippet) ? <Badge variant={getSourceScore(snippet) >= 75 ? "success" : getSourceScore(snippet) >= 55 ? "warning" : "neutral"}>{Math.round(getSourceScore(snippet))}%</Badge> : null}
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-400">{snippet.text || "No supporting snippet returned."}</p>
+              {snippet.url ? (
+                <a className="mt-3 inline-flex text-sm text-emerald-200 transition hover:text-emerald-100" href={snippet.url} target="_blank" rel="noreferrer">
+                  View source
+                </a>
+              ) : null}
+            </article>
+          ))
+        ) : (
+          <p className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm text-slate-500">
+            {meta?.retrievalModeUsed === "none" ? "Evidence analysis unavailable for this verification." : "No supporting sources were returned."}
+          </p>
+        )}
+      </div>
+    </ShellPanel>
+  );
+};
+
+const ContradictionPanel = ({ verification }: { verification: VerificationResult | null }) => {
+  const score = verification?.contradictionScore;
+  const hasContradiction = typeof score === "number" && score >= 20;
+
+  return (
+    <ShellPanel className={hasContradiction ? "border-rose-300/25" : ""}>
+      <SectionHeader label="Contradictions" title={hasContradiction ? "Contradiction Detected" : "No Major Contradiction Detected"} />
+      <p className="mt-4 text-sm leading-6 text-slate-400">
+        {!verification
+          ? "Contradiction analysis will appear after model comparison completes."
+          : hasContradiction
+            ? getMeaningfulText(verification.sections?.contradictions) || `Contradiction score: ${score}%. Review model agreement and claim checks for the conflict source.`
+            : "The returned model responses did not produce a major contradiction signal."}
+      </p>
+      {verification ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {verification.contradictionType ? <Badge variant={hasContradiction ? "danger" : "neutral"}>{verification.contradictionType.replace(/_/g, " ")}</Badge> : null}
+          {typeof score === "number" ? <Badge variant={hasContradiction ? "warning" : "success"}>{score}% score</Badge> : null}
+          {verification.outlierModels.map((model) => <Badge key={model} variant="warning">{model} differs</Badge>)}
+        </div>
+      ) : null}
+    </ShellPanel>
+  );
+};
+
+const ClaimsPanel = ({ verification }: { verification: VerificationResult | null }) => (
+  <ShellPanel>
+    <SectionHeader label="Claims" title="Claim-Level Verification" subtitle="Only real claim checks returned by the verifier are shown." />
+    <div className="mt-5 overflow-x-auto">
+      {verification?.claimVerifications.length ? (
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-white/[0.08] text-xs uppercase tracking-[0.12em] text-slate-500">
+              <th className="px-2 py-3">Claim</th>
+              <th className="px-2 py-3">Status</th>
+              <th className="px-2 py-3">Confidence</th>
+              <th className="px-2 py-3">Contradicted By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {verification.claimVerifications.map((claim) => (
+              <tr key={claim.id} className="border-b border-white/[0.05] align-top">
+                <td className="max-w-xl px-2 py-3 text-slate-200">{claim.claim}<p className="mt-1 text-xs leading-5 text-slate-500">{claim.explanation}</p></td>
+                <td className="px-2 py-3 text-slate-300">{claim.status.replace(/_/g, " ")}</td>
+                <td className="px-2 py-3 text-slate-300">{claim.confidenceScore}/100</td>
+                <td className="px-2 py-3 text-slate-300">{claim.contradictedByModels.length ? claim.contradictedByModels.join(", ") : "None"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm text-slate-500">Claim-level checks unavailable for this verification.</p>
+      )}
+    </div>
+  </ShellPanel>
+);
 
 export const SaasDashboard = () => {
   const router = useRouter();
-  const sourceReliabilityLabel = (score: number): "Highly Trusted" | "Trusted" | "Moderate" | "Weak Source" =>
-    score >= 90 ? "Highly Trusted" : score >= 75 ? "Trusted" : score >= 55 ? "Moderate" : "Weak Source";
   const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState<VerificationMode>("deep");
   const [responses, setResponses] = useState<ModelResponse[]>([]);
@@ -67,6 +790,7 @@ export const SaasDashboard = () => {
   const [verification, setVerification] = useState<VerificationResult | null>(null);
   const [meta, setMeta] = useState<VerificationExecutionMeta | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
@@ -77,23 +801,85 @@ export const SaasDashboard = () => {
   const session = getSession();
   const modelLayer = useMemo(() => getModelLayerConfig(displayPlan), [displayPlan]);
   const usage = session ? getUsage(session.email, displayPlan) : null;
+  const remainingToday = usage?.remaining ?? 10;
+  const dailyLimit = usage?.limit ?? 10;
   const sourceMap = useMemo(() => new Map(modelSources.map((item) => [item.model, item])), [modelSources]);
-  const isDemoMode = providerStatus ? !providerStatus.hasLiveProvider && !isLoading : false;
   const liveSuccessCount = runtimeProviderStatus ? Object.values(runtimeProviderStatus).filter((item) => item.liveSuccess).length : null;
-  const contradictionCount = !isDemoMode && verification?.contradictionScore ? Math.max(0, Math.ceil(verification.contradictionScore / 25)) : 0;
+  const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null || isLoading;
+  const trustScore = getCanonicalTrustScore(verification);
+  const canonicalAnswer = useMemo(() => getCanonicalVerifiedAnswer(verification), [verification]);
+  const trustLabel = verification ? getReliabilityLabel(trustScore) : "Awaiting verification";
+  const stages = getPipelineStages({ isLoading, hasRun: hasRunVerification, errorMessage, verification, evidenceCount: evidenceSnippets.length });
+  const disabledByQuota = Boolean(session && usage && usage.remaining <= 0);
 
-  const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (session && usage && usage.remaining <= 0) { setErrorMessage("Daily verification quota reached. Upgrade plan or wait for reset."); return; }
-    setIsLoading(true);
-    setErrorMessage(null);
-    setWarnings([]);
+  useEffect(() => {
+    const syncPlan = async () => {
+      try {
+        const response = await fetch("/api/auth/me", { headers: getSessionHeaders() });
+        const data = (await response.json()) as { ok: boolean; user?: { plan?: UserPlan } | null };
+        if (response.ok && data.user?.plan) {
+          setDisplayPlan(data.user.plan);
+          if (session) setSession({ ...session, plan: data.user.plan });
+          return;
+        }
+      } catch {
+        /* keep local fallback */
+      }
+      setDisplayPlan(session?.plan ?? "free");
+    };
+    void syncPlan();
+  }, [session?.email, session?.plan]);
+
+  useEffect(() => {
+    const loadStatus = async () => {
+      try {
+        const response = await fetch("/api/provider-status", { headers: getSessionHeaders() });
+        const data = (await response.json()) as { ok: boolean; status?: ProviderStatus };
+        if (response.ok && data.ok && data.status) setProviderStatus(data.status);
+      } catch {
+        setProviderStatus(null);
+      }
+    };
+    void loadStatus();
+  }, [displayPlan]);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!session) {
+        setHistory([]);
+        return;
+      }
+      try {
+        const response = await fetch("/api/history", { headers: getSessionHeaders() });
+        const data = (await response.json()) as { ok: boolean; history?: HistoryItem[] };
+        setHistory(response.ok && data.ok ? data.history ?? [] : []);
+      } catch {
+        setHistory([]);
+      }
+    };
+    void loadHistory();
+  }, [session?.email]);
+
+  const clearResultState = () => {
     setResponses([]);
     setModelSources([]);
     setEvidenceSnippets([]);
     setVerification(null);
     setMeta(null);
     setRuntimeProviderStatus(null);
+    setErrorMessage(null);
+    setWarnings([]);
+    setActionMessage(null);
+  };
+
+  const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (disabledByQuota) {
+      setErrorMessage("Daily verification quota reached. Upgrade plan or wait for reset.");
+      return;
+    }
+    setIsLoading(true);
+    clearResultState();
 
     try {
       const response = await fetch("/api/verify", {
@@ -114,11 +900,16 @@ export const SaasDashboard = () => {
       setMeta(data.meta);
       setRuntimeProviderStatus(data.providerRuntimeStatus);
       setWarnings(data.warnings ?? []);
-      if (data.usage?.plan) {
-        setDisplayPlan(data.usage.plan);
-      }
-      if (session && data.usage?.plan) {
-  incrementUsage(session.email, data.usage.plan);
+      if (data.usage?.plan) setDisplayPlan(data.usage.plan);
+      if (session) incrementUsage(session.email, displayPlan);
+      if (session) {
+        try {
+          const historyResponse = await fetch("/api/history", { headers: getSessionHeaders() });
+          const historyData = (await historyResponse.json()) as { ok: boolean; history?: HistoryItem[] };
+          setHistory(historyResponse.ok && historyData.ok ? historyData.history ?? [] : []);
+        } catch {
+          /* history is non-critical */
+        }
       }
     } catch {
       setErrorMessage("Verification request failed. Please try again.");
@@ -126,95 +917,26 @@ export const SaasDashboard = () => {
       setIsLoading(false);
     }
   };
-  useEffect(() => {
-    const syncPlan = async () => {
-      try {
-        const response = await fetch("/api/auth/me", { headers: getSessionHeaders() });
-        const data = (await response.json()) as { ok: boolean; user?: { plan?: UserPlan } | null };
-        if (response.ok && data.user?.plan) {
-          setDisplayPlan(data.user.plan);
-          if (session) {
-            setSession({ ...session, plan: data.user.plan });
-          }
-          return;
-        }
-      } catch {
-        /* keep local fallback */
-      }
-      setDisplayPlan(session?.plan ?? "free");
-    };
-    void syncPlan();
-  }, [session?.email, session?.plan]);
 
-  useEffect(() => {
-    const loadStatus = async () => {
-      const response = await fetch("/api/provider-status", { headers: getSessionHeaders() });
-      const data = (await response.json()) as { ok: boolean; status?: ProviderStatus };
-      if (response.ok && data.ok && data.status) {
-        setProviderStatus(data.status);
-      }
-    };
-    void loadStatus();
-  }, [displayPlan]);
-
-  const hasRunVerification = responses.length > 0 || verification !== null || errorMessage !== null;
-  const trustScore = verification?.finalConfidenceScore ?? 0;
-  const evidenceDiversity = new Set(evidenceSnippets.map((snippet) => snippet.sourceDomain).filter(Boolean)).size;
-  const disputedClaimCount = verification?.claimVerifications.filter((claim) => ["mixed_evidence", "contradicted", "misleading", "false_premise", "insufficient_evidence"].includes(claim.status)).length ?? 0;
-  const minorityOppositionLevel = Math.min(100, Math.max(
-    Math.round((verification?.contradictionScore ?? 0) * 0.85),
-    disputedClaimCount > 0 ? 20 + disputedClaimCount * 10 : 0
-  ));
-  const trustLabel =
-    verification?.confidenceLabel === "Very High"
-      ? "Highly Reliable"
-      : verification?.confidenceLabel === "High"
-        ? "Strong Reliability"
-      : verification?.confidenceLabel === "Medium"
-        ? "Moderate Reliability"
-        : verification?.confidenceLabel === "Low"
-          ? "Weak Reliability"
-          : "Awaiting verification";
-
-
-  const getEvidenceScore = (s: EvidenceSnippet): number => s.credibilityScore ?? s.sourceQualityScore ?? 0;
-
-  const evidenceGroups = useMemo(() => {
-    const sorted = [...evidenceSnippets].sort((a, b) => getEvidenceScore(b) - getEvidenceScore(a));
-    const top = sorted.filter((s) => getEvidenceScore(s) >= 85);
-    const support = sorted.filter((s) => getEvidenceScore(s) >= 60 && getEvidenceScore(s) < 85);
-    const weak = sorted.filter((s) => getEvidenceScore(s) < 60);
-    return { top: top.slice(0,5), support, weak };
-  }, [evidenceSnippets]);
+  const handlePromptChange = (value: string) => {
+    setPrompt(value);
+    clearResultState();
+  };
 
   const handleCopyAnswer = async () => {
-    if (!verification?.finalAnswer) return;
-    await navigator.clipboard.writeText(verification.finalAnswer);
+    if (!canonicalAnswer) return;
+    await navigator.clipboard.writeText(canonicalAnswer);
+    setActionMessage("Verified answer copied.");
   };
 
-  const getShortAnswer = (answer?: string): string => {
-    if (!answer || typeof answer !== "string") {
-      return "Model unavailable";
+  const handleShareAnswer = async () => {
+    if (!canonicalAnswer) {
+      setActionMessage("Run verification before sharing.");
+      return;
     }
-    const words = answer.split(/\s+/);
-    return words.length > 45 ? `${words.slice(0, 45).join(" ")}…` : answer;
+    await navigator.clipboard.writeText(`SVA verified:\n${canonicalAnswer}`);
+    setActionMessage("Share text copied.");
   };
-
-
-  const structuredAnswer = useMemo(() => {
-    if (!verification?.finalAnswer) return null;
-    const sections = verification.finalAnswer.split(/\n\n+/);
-    const read = (prefix: string) => sections.find((s) => s.startsWith(prefix))?.replace(prefix, "").trim();
-    return {
-      quickVerdict: read("Quick Verdict:"),
-      coreConclusion: read("Core Conclusion:"),
-      supportingEvidence: read("Supporting Evidence:"),
-      risks: read("Risks / Caveats:"),
-      contradictions: read("Contradictions:"),
-      consensus: read("Consensus Summary:"),
-      finalConfidence: read("Final Confidence:")
-    };
-  }, [verification]);
 
   const handleExportReport = () => {
     if (!verification) return;
@@ -228,8 +950,8 @@ export const SaasDashboard = () => {
     const report = `SVA Verification Report
 
 Question: ${prompt}
-Final Answer: ${verification.finalAnswer}
-Confidence Score: ${verification.finalConfidenceScore}/100
+Final Answer: ${canonicalAnswer}
+Confidence Score: ${trustScore}/100
 Verdict: ${(verification.judgeVerdict ?? "caution").toUpperCase()}
 
 Model Responses:
@@ -248,380 +970,126 @@ ${evidenceReport}
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] text-slate-100">
-      <div className="mx-auto flex max-w-[1600px]">
-        <AppSidebar contradictionCount={contradictionCount} isLoggedIn={Boolean(session)} remainingToday={usage?.remaining ?? 10} onLogout={() => { logout(); router.push("/login"); }} />
-
-        <main className="min-w-0 flex-1 space-y-4 p-4 sm:p-5">
-          <Card><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="text-slate-300">{session ? `${session.email} · ${displayPlan.toUpperCase()} plan` : "Guest session"}</p><div className="flex items-center gap-2">{usage ? <Badge variant={usage.remaining===0?"danger":"success"}>Remaining today: {usage.remaining}/{usage.limit}</Badge> : null}<Button variant="ghost" type="button" onClick={()=>{logout(); router.push("/login");}}>Logout</Button></div></div></Card>
-          <DashboardHeader
-            prompt={prompt}
-            mode={mode}
+    <div className="min-h-screen bg-[#05070A] text-slate-100">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(16,185,129,0.09),transparent_32rem),radial-gradient(circle_at_82%_8%,rgba(34,211,238,0.07),transparent_28rem)]" />
+      <div className="relative flex">
+        <AppNavigation
+          email={session?.email}
+          plan={displayPlan}
+          remaining={remainingToday}
+          limit={dailyLimit}
+          history={history}
+          onHistorySelect={handlePromptChange}
+          onLogout={() => {
+            logout();
+            router.push("/login");
+          }}
+          onNewVerification={() => {
+            setPrompt("");
+            clearResultState();
+          }}
+        />
+        <main className="min-w-0 flex-1 px-3 pb-10 sm:px-5">
+          <MobileAppBar
+            plan={displayPlan}
+            onNewVerification={() => {
+              setPrompt("");
+              clearResultState();
+            }}
+            onLogout={() => {
+              logout();
+              router.push("/login");
+            }}
+          />
+          <TopStatusBar
             isLoading={isLoading}
-            onPromptChange={setPrompt}
-            onModeChange={setMode}
-            onSubmit={handleVerify}
-            elapsedLabel={meta ? `Verification completed in mode: ${meta.modeUsed ?? mode}` : undefined}
+            verification={verification}
+            errorMessage={errorMessage}
+            warnings={warnings}
+            providerStatus={providerStatus}
+            liveSuccessCount={liveSuccessCount}
+            plan={displayPlan}
+            remaining={remainingToday}
+            limit={dailyLimit}
           />
 
-          {isDemoMode ? (
-            <Card className="border-amber-500/40 bg-amber-500/10 py-3" title="AI gateway Mode">
-              <p className="text-sm text-amber-100">
-                AI gateway key is missing. Add backend configuration to enable live AI answers.
-              </p>
-              <details className="mt-2 text-xs text-amber-100">
-                <summary className="cursor-pointer text-amber-200">Setup helper</summary>
-                <ul className="mt-1 grid gap-1 sm:grid-cols-2">
-                  <li>AI gateway key: Configured / Missing</li>
-                  <li>Fast AI: Connected / Not configured / Failed</li>
-                  <li>Balanced AI: Connected / Not configured / Failed</li>
-                  <li>Research AI: Connected / Not configured / Failed</li>
-                  <li>Evidence mode: Demo / Web</li>
-                </ul>
-              </details>
-            </Card>
-          ) : null}
-          {!isDemoMode && providerStatus ? (
-            <Card className="border-emerald-500/30 bg-emerald-500/10 py-3" title="Live Provider Status">
-              <p className="text-sm text-emerald-100">
-                {liveSuccessCount === null
-                  ? `Configured for live verification — ${providerStatus.liveProviderCount} of 3 providers have API keys.`
-                  : `Live verification enabled — ${liveSuccessCount} of 3 providers returned live responses.`}
-              </p>
-              <ul className="mt-2 grid gap-2 text-xs text-emerald-100 sm:grid-cols-2">
-                <li className="flex min-w-0 items-center gap-2">
-                  <ProviderLogo provider={modelLayer.providerMeta["Fast AI"].logoProvider} size="sm" />
-                  <span className="min-w-0"><span className="font-medium">{modelLayer.providerMeta["Fast AI"].brand}</span> / Fast AI: {runtimeProviderStatus ? (runtimeProviderStatus["Fast AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Fast AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Fast AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</span>
-                </li>
-                <li className="flex min-w-0 items-center gap-2">
-                  <ProviderLogo provider={modelLayer.providerMeta["Balanced AI"].logoProvider} size="sm" />
-                  <span className="min-w-0"><span className="font-medium">{modelLayer.providerMeta["Balanced AI"].brand}</span> / Balanced AI: {runtimeProviderStatus ? (runtimeProviderStatus["Balanced AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Balanced AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Balanced AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</span>
-                </li>
-                <li className="flex min-w-0 items-center gap-2">
-                  <ProviderLogo provider={modelLayer.providerMeta["Research AI"].logoProvider} size="sm" />
-                  <span className="min-w-0"><span className="font-medium">{modelLayer.providerMeta["Research AI"].brand}</span> / Research AI: {runtimeProviderStatus ? (runtimeProviderStatus["Research AI"].liveSuccess ? "Live response" : `Request issue: ${runtimeProviderStatus["Research AI"].errorMessage ?? "request failed"}`) : providerStatus.modelLayer === "pro" ? (proProviderConfigured("Research AI", providerStatus) ? "Configured" : "Not configured") : providerStatus.openrouterConfigured ? "Configured" : "Not configured"}</span>
-                </li>
-                <li>Retrieval: {providerStatus.retrievalProvider.toUpperCase()}</li>
-              </ul>
-              {providerStatus.liveProviderCount === 1 ? (
-                <p className="mt-2 text-xs text-amber-200">Single-provider live mode. Add more providers for stronger cross-model verification.</p>
-              ) : null}
-              {providerStatus.retrievalProvider === "web" && !providerStatus.webRetrievalConfigured ? (
-                <p className="mt-2 text-xs text-amber-200">Web retrieval API key missing. Configure retrieval credentials to enable live evidence.</p>
-              ) : null}
-            </Card>
-          ) : null}
-
-          {errorMessage ? (
-            <Card className="border-rose-500/40 bg-rose-500/10" title="Verification Error">
-              <p className="text-sm text-rose-200">{errorMessage}</p>
-            </Card>
-          ) : null}
-
-          {warnings.length > 0 ? (
-            <Card className="border-amber-500/40 bg-amber-500/10" title="Warnings">
-              <ul className="list-disc space-y-1 pl-5 text-sm text-amber-100">
-                {warnings.map((warning, idx) => (
-                  <li key={`${warning}-${idx}`}>{warning}</li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
-
-          <Card title="Multi-AI Responses" subtitle="Cross-model agreement overview with expandable answers">
-            <div className="mb-4">
-              <Badge variant={modelLayer.id === "pro" ? "indigo" : "neutral"}>{modelLayer.badge}</Badge>
+          <div className="mx-auto max-w-[1500px] space-y-5 pt-5">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="space-y-5">
+                {!hasRunVerification && !prompt ? <EmptyVerificationState onSelectPrompt={setPrompt} /> : null}
+                <VerificationComposer
+                  prompt={prompt}
+                  mode={mode}
+                  isLoading={isLoading}
+                  disabled={disabledByQuota}
+                  onPromptChange={handlePromptChange}
+                  onModeChange={setMode}
+                  onSubmit={handleVerify}
+                />
+                <QueryCard prompt={prompt} hasRun={hasRunVerification && Boolean(prompt)} />
+                {errorMessage ? (
+                  <ShellPanel className="border-rose-300/30 bg-rose-300/10">
+                    <SectionHeader label="Error" title="Verification Unavailable" subtitle={errorMessage} />
+                    <Button type="button" className="mt-4" onClick={() => setErrorMessage(null)}>
+                      Dismiss
+                    </Button>
+                  </ShellPanel>
+                ) : null}
+                {warnings.length ? (
+                  <ShellPanel className="border-amber-300/25 bg-amber-300/10">
+                    <SectionHeader label="Limited coverage" title="Verification Warnings" />
+                    <ul className="mt-4 space-y-2 text-sm leading-6 text-amber-50/80">
+                      {warnings.map((warning, idx) => <li key={`${warning}-${idx}`}>{warning}</li>)}
+                    </ul>
+                  </ShellPanel>
+                ) : null}
+                <VerificationPipeline stages={stages} />
+                <VerifiedAnswerCard
+                  verification={verification}
+                  trustScore={trustScore}
+                  canonicalAnswer={canonicalAnswer}
+                  actionMessage={actionMessage}
+                  onCopy={handleCopyAnswer}
+                  onExport={handleExportReport}
+                  onShare={handleShareAnswer}
+                />
+              </div>
+              <div className="space-y-5">
+                <TrustScorePanel verification={verification} trustScore={trustScore} trustLabel={trustLabel} />
+                <ContradictionPanel verification={verification} />
+                <ShellPanel>
+                  <SectionHeader label="Provider status" title="Live Coverage" />
+                  <div className="mt-4 space-y-2 text-sm text-slate-400">
+                    {visibleModels.map((model) => (
+                      <div key={model} className="flex items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+                        <span>{model}</span>
+                        <span className="text-slate-300">{getProviderAvailabilityLabel(model, providerStatus, runtimeProviderStatus?.[model])}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {providerStatus?.retrievalProvider === "web" && !providerStatus.webRetrievalConfigured ? (
+                    <p className="mt-3 text-xs leading-5 text-amber-200">Web retrieval key missing. Evidence may be unavailable.</p>
+                  ) : null}
+                </ShellPanel>
+              </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleModels.map((model) => {
-                const response = responses.find((item) => item.model === model);
-                const source = sourceMap.get(model);
-                const provider = modelLayer.providerMeta[model];
-                const isSuccess = isLiveModelResponse(source);
-                const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
-                const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
-                const badgeText = !hasRunVerification ? "Ready" : isSuccess ? (isMajority ? "Majority" : isOutlier ? "Outlier" : "Available") : "Unavailable";
-                const badgeVariant = !hasRunVerification ? "neutral" : !isSuccess ? "danger" : isOutlier ? "warning" : "success";
 
-                return (
-                  <article
-                    key={model}
-                    className={`min-w-0 rounded-xl border bg-gradient-to-br p-3 sm:p-4 transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-[0_0_28px_rgba(139,92,246,0.18)] ${
-                      !isDemoMode && isMajority
-                        ? `border-emerald-500/40 ${provider.accent}`
-                        : `border-slate-700 ${provider.accent}`
-                    }`}
-                  >
-                    <div className="mb-3 flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-3">
-                        {provider.logoProvider ? (
-                          <ProviderLogo provider={provider.logoProvider} size="lg" className="rounded-xl" />
-                        ) : (
-                          <span
-                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-md ${provider.logoBg}`}
-                            aria-hidden
-                          >
-                            {provider.monogram}
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-100">{provider.brand}</p>
-                          <p className="text-xs text-slate-400">{model}</p>
-                        </div>
-                      </div>
-                      <Badge variant={badgeVariant} className="shrink-0">{badgeText}</Badge>
-                    </div>
-                    <Badge variant="violet" className="text-[10px]">{provider.badgeLabel}</Badge>
-                    <p className="mt-2 text-xs leading-5 text-slate-300">
-                      {isLoading
-                        ? "Verifying response..."
-                        : !hasRunVerification
-                          ? "Ready to verify"
-                          : isDemoMode
-                            ? "Model unavailable. Check backend model configuration."
-                            : isSuccess
-                              ? getShortAnswer(response?.answer)
-                              : "Model unavailable"}
-                    </p>
-                    <p className="mt-3 text-[11px] text-slate-400">Source: SVA Model Layer</p>
-                  </article>
-                );
-              })}
-            </div>{actionMessage ? <p className="mt-2 text-xs text-violet-300">{actionMessage}</p> : null}
-          </Card>
+            <ModelAgreementSection
+              responses={responses}
+              sourceMap={sourceMap}
+              runtimeProviderStatus={runtimeProviderStatus}
+              providerStatus={providerStatus}
+              modelLayer={modelLayer}
+              verification={verification}
+              hasRunVerification={hasRunVerification}
+              isLoading={isLoading}
+            />
 
-          <div className="grid gap-5 xl:grid-cols-[1.45fr_0.95fr]">
-            <Card title="SVA Judge" subtitle="Trust verdict and contradiction summary">
-              <p className="text-sm text-slate-300">Verdict: {isDemoMode ? "DEMO PREVIEW" : (verification?.judgeVerdict ?? "caution").toUpperCase()}</p>
-              <p className="mt-2 text-sm text-slate-400">
-                {isDemoMode
-                  ? "SVA Judge requires live model responses and evidence sources before issuing a verdict."
-                  : verification?.judgeSummary ?? "Run verification to generate a judge summary."}
-              </p>
-              {!isDemoMode && verification?.judgeRiskFlags?.length ? (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-amber-300">
-                  {verification.judgeRiskFlags.map((flag, idx) => (
-                    <li key={`${flag}-${idx}`}>{flag}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </Card>
-
-            <Card title="SVA Trust Score" subtitle={isDemoMode ? "--/100" : `${trustScore}/100`}>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div
-                    className="grid h-24 w-24 place-items-center rounded-full p-1"
-                    style={{ background: `conic-gradient(#8b5cf6 ${isDemoMode ? 0 : trustScore * 3.6}deg, #1f2937 0deg)` }}
-                  >
-                    <div className="grid h-full w-full place-items-center rounded-full bg-slate-950 text-sm font-semibold text-violet-200">{isDemoMode ? "--" : trustScore}</div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-100">{isDemoMode ? "Live Preview" : trustLabel}</p>
-                    <p className="text-xs text-slate-400">
-                      {isDemoMode
-                        ? "Connect live provider API keys to generate a real trust score."
-                        : "Confidence is derived from agreement, evidence, source quality, contradiction impact, and claim coverage."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { label: "Model Agreement", value: verification?.agreementScore ?? 0 },
-                    { label: "Evidence Strength", value: verification?.evidenceAlignmentScore ?? 0 },
-                    { label: "Source Quality", value: verification?.sourceQualityScore ?? 0 },
-                    { label: "Contradiction Impact", value: verification?.trustBreakdown ? verification.trustBreakdown.contradictionImpact : Math.max(0, 100 - (verification?.contradictionScore ?? 0)) },
-                    { label: "Claim Coverage", value: verification?.claimVerifications?.length ? Math.round((verification.claimVerifications.filter((c) => ["supported","strongly_supported","mostly_supported"].includes(c.status)).length / verification.claimVerifications.length) * 100) : 0 }
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <div className="mb-1 flex justify-between text-xs text-slate-300">
-                        <span>{item.label}</span>
-                        <span>{isDemoMode ? "--" : `${item.value}%`}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-800">
-                        <div className="h-2 rounded-full bg-violet-400" style={{ width: `${isDemoMode ? 0 : item.value}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">
-                  <p className="font-semibold text-slate-100">Consensus Meter</p><p className="mt-1">{verification ? (verification.outlierModels.length === 0 ? `HIGH • ${verification.majorityModels.length}/3 models aligned. No outliers detected.` : verification.outlierModels.length === 1 ? `MODERATE • 2 agree • 1 outlier (${verification.outlierModels.join(", ")}).` : `PARTIAL CONSENSUS • Models show disagreement and require context.`) : "Run verification to calculate consensus."}</p><p className="mt-2 font-semibold text-slate-100">Why this score?</p>
-                  <p className="mt-1">Model agreement: {verification?.agreementScore ?? 0}% — how closely the AI answers match.</p>
-                  <p>Evidence strength: {verification?.evidenceAlignmentScore ?? 0}% — how well external sources support the answer.</p>
-                  <p>Contradiction score: {verification?.contradictionScore ?? 0}% — lower is better.</p>
-                  <p>Source quality: {verification?.sourceQualityScore ?? 0}% — trust level of retrieved sources.</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          <Card
-            title="Final SVA Verified Answer"
-            subtitle="Highest-confidence response synthesized from majority model alignment and evidence quality."
-            className="border-violet-400/40 shadow-[0_0_35px_rgba(139,92,246,0.18)]"
-          >
-            {isDemoMode ? (
-              <p className="text-lg leading-7 text-slate-100">Live verification unavailable. Connect provider API keys to generate a final SVA verified answer.</p>
-            ) : structuredAnswer ? (
-              <div className="space-y-4 text-sm">
-                <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-emerald-200">Quick Verdict</p>
-                  <p className="mt-1 text-slate-100">{structuredAnswer.quickVerdict}</p>
-                  <p className="mt-1 text-emerald-200">{structuredAnswer.finalConfidence}</p>
-                </section>
-                <section><p className="text-xs uppercase tracking-wide text-slate-400">Core Conclusion</p><p className="mt-1 text-slate-200">{structuredAnswer.coreConclusion}</p></section>
-                <section><p className="text-xs uppercase tracking-wide text-slate-400">Evidence Summary</p><p className="mt-1 whitespace-pre-line text-slate-300">{structuredAnswer.supportingEvidence}</p></section>
-                <section className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><p className="text-xs uppercase tracking-wide text-amber-200">Risks & Caveats</p><p className="mt-1 text-amber-100">{structuredAnswer.risks}</p></section>
-                <section><p className="text-xs uppercase tracking-wide text-slate-400">Contradictions</p><p className="mt-1 text-slate-300">{structuredAnswer.contradictions}</p></section>
-                <section><p className="text-xs uppercase tracking-wide text-slate-400">Consensus Summary</p><p className="mt-1 text-slate-300">{structuredAnswer.consensus}</p></section>
-                <section><p className="text-xs uppercase tracking-wide text-slate-400">Why SVA Chose This Answer</p><ul className="mt-1 list-disc space-y-1 pl-5 text-slate-300"><li>High-credibility evidence was prioritized over weaker sources.</li><li>Majority model alignment received heavier weight than outlier claims.</li><li>Contradiction severity and claim support directly adjusted confidence.</li></ul></section>
-              </div>
-            ) : (
-              <p className="text-lg leading-7 text-slate-100">{verification?.finalAnswer ?? "No verified answer yet."}</p>
-            )}
-            <div className="mt-4 flex flex-wrap gap-2 sm:gap-3">
-              <Button className="min-h-10" variant="primary" type="button" onClick={handleCopyAnswer} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
-                Copy Answer
-              </Button>
-              <Button className="min-h-10" type="button" onClick={handleExportReport} disabled={isDemoMode || !verification} title={isDemoMode ? "Available after live verification." : undefined}>
-                Export
-              </Button>
-              <Button className="min-h-10" variant="ghost" type="button" onClick={async ()=>{ if(!verification){setActionMessage("Share coming soon."); return;} await navigator.clipboard.writeText(`SVA verified: ${verification.finalAnswer}`); setActionMessage("Share text copied to clipboard."); }} disabled={isDemoMode} title={isDemoMode ? "Available after live verification." : undefined}>Share</Button>
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+              <EvidencePanel evidenceSnippets={evidenceSnippets} meta={meta} isLoading={isLoading} />
+              <ClaimsPanel verification={verification} />
             </div>
-          </Card>
-
-          <div className="grid gap-5 lg:grid-cols-3">
-            <Card title="Claim Verification Table" className="lg:col-span-3">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-xs uppercase text-slate-400">
-                      <th className="px-2 py-2">Claim</th>
-                      <th className="px-2 py-2">Verification Status</th>
-                      <th className="px-2 py-2">Confidence</th>
-                      <th className="px-2 py-2">Supporting Evidence</th>
-                      <th className="px-2 py-2">Contradicted By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isDemoMode ? (
-                      <tr>
-                        <td className="px-2 py-3 text-slate-400" colSpan={5}>
-                          Claims will appear after verification.
-                        </td>
-                      </tr>
-                    ) : (
-                      [...(verification?.claimVerifications ?? [])].sort((a,b)=>b.confidenceScore-a.confidenceScore).map((row) => (
-                        <tr key={row.id} className="border-b border-slate-900/80 align-top">
-                          <td className="px-2 py-3 text-slate-200">{row.claim}</td>
-                          <td className="px-2 py-3">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${statusStyle[row.status] ?? statusStyle.uncertain}`}>{row.status}</span>
-                          </td>
-                          <td className="px-2 py-3 text-slate-300">{row.confidenceScore}%</td>
-                          <td className="px-2 py-3 text-slate-300">{row.supportingEvidence.length}</td>
-                          <td className="px-2 py-3 text-slate-300">{row.contradictedByModels.length ? row.contradictedByModels.join(", ") : "None"}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-            <Card title="Evidence Panel" className="lg:col-span-2">
-              {isDemoMode ? (
-                <p className="text-xs text-slate-400">
-                  Evidence sources will appear after verification.
-                </p>
-              ) : evidenceSnippets.length ? (
-                <div className="space-y-4">
-                  <p className="text-xs text-slate-400">
-                    Sources retrieved: {evidenceSnippets.length} · Retrieval mode: {meta?.retrievalModeUsed ?? "web"}
-                  </p>
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-                    <p className="font-semibold text-slate-100">Evidence Synthesis</p>
-                    <p className="mt-1 text-xs sm:text-sm">
-                      {evidenceGroups.top.length} top-trusted · {evidenceGroups.support.length} supporting · {evidenceGroups.weak.length} contextual
-                    </p>
-                  </div>
-                  {evidenceGroups.top.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {evidenceGroups.top.map((snippet, idx) => (
-                        <EvidenceCard
-                          key={`top-${snippet.title}-${idx}`}
-                          snippet={snippet}
-                          linkedClaimsCount={getLinkedClaimsCount(snippet, verification)}
-                          sourceReliabilityLabel={sourceReliabilityLabel}
-                          variant="top"
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                  {evidenceGroups.support.length ? (
-                    <details className="rounded-xl border border-slate-800 p-3">
-                      <summary className="cursor-pointer text-sm text-slate-300">
-                        Supporting Evidence ({evidenceGroups.support.length})
-                      </summary>
-                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {evidenceGroups.support.map((snippet, idx) => (
-                          <EvidenceCard
-                            key={`sup-${snippet.title}-${idx}`}
-                            snippet={snippet}
-                            linkedClaimsCount={getLinkedClaimsCount(snippet, verification)}
-                            sourceReliabilityLabel={sourceReliabilityLabel}
-                            variant="support"
-                          />
-                        ))}
-                      </div>
-                    </details>
-                  ) : null}
-                  {evidenceGroups.weak.length ? (
-                    <details className="rounded-xl border border-amber-700/40 p-3">
-                      <summary className="cursor-pointer text-sm text-amber-300">
-                        Lower Confidence / Contextual ({evidenceGroups.weak.length})
-                      </summary>
-                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {evidenceGroups.weak.map((snippet, idx) => (
-                          <EvidenceCard
-                            key={`weak-${snippet.title}-${idx}`}
-                            snippet={snippet}
-                            linkedClaimsCount={getLinkedClaimsCount(snippet, verification)}
-                            sourceReliabilityLabel={sourceReliabilityLabel}
-                            variant="weak"
-                          />
-                        ))}
-                      </div>
-                    </details>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400">
-                  {isLoading ? "Searching web... analyzing evidence... comparing sources... generating verdict..." : "Evidence retrieval unavailable. SVA used model consensus only."}
-                </p>
-              )}
-            </Card>
-            <Card title="Contradictions">
-              <p className="text-sm text-slate-300">{isDemoMode ? "No live contradiction analysis yet. Connect providers to compare real model outputs." : `Contradiction score: ${verification?.contradictionScore ?? 0}%`}</p>
-              {!isDemoMode && verification ? (
-                <div className="mt-2 space-y-1 text-xs text-slate-300">
-                  <p>Contradiction Type: <span className="text-violet-300">{verification.contradictionType ?? "contextual"}</span></p>
-                  <p>Consensus Evolution Score: <span className="text-emerald-300">{verification.consensusEvolutionScore ?? 0}%</span></p>
-                  <p>{verification.consensusEvolutionSummary}</p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {verification.contradictionType === "temporal" ? <Badge variant="warning">Historical Claim</Badge> : null}
-                    {verification.contradictionType === "consensus_shift" ? <Badge variant="danger">Consensus Shift</Badge> : null}
-                    {verification.contradictionType === "direct" ? <Badge variant="danger">Modern Consensus Conflict</Badge> : null}
-                    {verification.contradictionType === "contextual" ? <Badge>Contextual Disagreement</Badge> : null}
-                  </div>
-                </div>
-              ) : null}
-              <p className="mt-2 text-xs text-slate-400">
-                {isDemoMode ? "Contradictions will appear only if models disagree." : meta?.providerMessage ?? "Contradictions will appear only if models disagree."}
-              </p>
-            </Card>
           </div>
-
-          <FeedbackSection />
         </main>
       </div>
     </div>

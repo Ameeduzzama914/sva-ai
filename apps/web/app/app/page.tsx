@@ -18,6 +18,9 @@ export default function AppPage() {
     setReady(true);
   }, [router]);
 
-  if (!ready) return <main className="grid min-h-screen place-items-center bg-[#070b14] text-slate-300">Checking session…</main>;
+  if (!ready) {
+    return <main className="grid min-h-screen place-items-center bg-[#05070A] text-slate-300">Checking session...</main>;
+  }
+
   return <SaasDashboard />;
 }
