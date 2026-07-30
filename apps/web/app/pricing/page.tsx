@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MarketingNav } from "../../components/marketing-nav";
+import { PublicFooter } from "../../components/public-shell";
 import { ProviderLogo } from "../../components/provider-logo";
 import { RazorpayCheckoutButton } from "../../components/RazorpayCheckoutButton";
 import { Badge } from "../../components/ui/badge";
@@ -68,29 +69,29 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100">
+    <div className="sva-atmosphere min-h-screen text-slate-100">
       <MarketingNav />
       <main className="mx-auto max-w-6xl px-4 pb-14 pt-20 sm:px-6">
         <div className="mx-auto mb-10 max-w-2xl text-center">
-          <p className="text-sm font-medium uppercase tracking-wide text-cyan-300">Pricing</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200/75">Pricing</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white">Pricing for every trust workflow</h1>
           <p className="mt-3 leading-7 text-slate-400">Choose the verification depth, model access, and daily capacity that match how often you need confidence-backed answers.</p>
         </div>
 
         <div className={`grid gap-5 ${showAdminEntry ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"}`}>
           {plans.map((plan) => (
-            <Card key={plan.name} className={`h-full backdrop-blur transition duration-200 hover:-translate-y-1 hover:border-violet-400/40 ${plan.featured ? "md:scale-[1.02] border-violet-500/70 bg-violet-500/10 shadow-[0_0_50px_rgba(139,92,246,0.24)]" : "bg-slate-900/70 shadow-lg shadow-black/15"}`}>
+            <Card key={plan.name} className={`h-full backdrop-blur transition duration-200 hover:-translate-y-1 hover:border-emerald-300/25 ${plan.featured ? "md:scale-[1.02] border-emerald-300/35 bg-emerald-300/[0.055] shadow-[0_0_50px_rgba(16,185,129,0.10)]" : ""}`}>
               <div className="flex h-full flex-col space-y-4">
                 <div className="flex min-h-7 flex-wrap gap-2">
-                  {plan.featured ? <Badge variant="violet">Most Popular</Badge> : null}
+                  {plan.featured ? <Badge variant="success">Most Popular</Badge> : null}
                   {plan.key === "ultra" ? <Badge variant="cyan">Highest Capacity</Badge> : null}
                 </div>
                 <h2 className="text-2xl font-semibold text-white">{plan.name}</h2>
-                <p className="text-3xl font-semibold text-violet-200">{plan.price}</p>
+                <p className="text-3xl font-semibold text-emerald-100">{plan.price}</p>
                 <p className="text-sm leading-6 text-slate-300">{plan.description}</p>
                 <div className="flex flex-wrap gap-2">
                   {plan.chips.map((chip) => (
-                    <Badge key={chip} variant="indigo" className="gap-1.5">
+                    <Badge key={chip} variant="neutral" className="gap-1.5">
                       <ProviderLogo provider={chip} size="sm" className="border-white/20" />{chip}
                     </Badge>
                   ))}
@@ -143,6 +144,7 @@ export default function PricingPage() {
         </section>
         {msg ? <p className="mt-4 text-sm text-amber-300">{msg}</p> : null}
       </main>
+      <PublicFooter />
     </div>
   );
 }

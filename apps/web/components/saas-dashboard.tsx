@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { ProviderLogo } from "./provider-logo";
@@ -198,7 +199,7 @@ const AppNavigation = ({
   const navItems = ["Home", "History", "Saved", "Reports", "Settings"];
   return (
     <aside className="hidden min-h-screen w-[292px] shrink-0 border-r border-white/[0.07] bg-[#05070A]/95 px-4 py-5 lg:block">
-      <div className="flex items-center gap-3">
+      <Link href="/" aria-label="Go to SVA home" className="flex items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50">
         <div className="grid h-11 w-11 place-items-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-sm font-semibold text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.12)]">
           SVA
         </div>
@@ -206,7 +207,7 @@ const AppNavigation = ({
           <p className="text-lg font-semibold text-white">SVA</p>
           <p className="text-xs text-slate-500">Super Verified AI</p>
         </div>
-      </div>
+      </Link>
 
       <button
         type="button"
@@ -217,17 +218,13 @@ const AppNavigation = ({
       </button>
 
       <nav className="mt-7 space-y-1" aria-label="Primary navigation">
-        {navItems.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={cx(
-              "flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40",
-              item === "Home" ? "border border-white/[0.08] bg-white/[0.055] text-white" : "text-slate-400 hover:bg-white/[0.045] hover:text-slate-100"
-            )}
-          >
+        <Link href="/app" className="flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.055] px-3 py-2.5 text-left text-sm text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40">
+          Home
+        </Link>
+        {navItems.slice(1).map((item) => (
+          <button key={item} type="button" disabled className="flex w-full cursor-not-allowed items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm text-slate-500">
             <span>{item}</span>
-            {item !== "Home" ? <span className="text-[10px] uppercase tracking-[0.14em] text-slate-600">Soon</span> : null}
+            <span className="text-[10px] uppercase tracking-[0.14em] text-slate-600">Soon</span>
           </button>
         ))}
       </nav>
@@ -274,6 +271,12 @@ const AppNavigation = ({
             <div className="h-1.5 rounded-full bg-emerald-300" style={{ width: `${Math.min(100, (remaining / Math.max(limit, 1)) * 100)}%` }} />
           </div>
         </div>
+        <Link
+          href={plan === "ultra" ? "/billing" : "/pricing"}
+          className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-emerald-200/50 bg-emerald-300 px-3 text-sm font-semibold text-[#042016] transition hover:bg-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50"
+        >
+          {plan === "free" ? "Upgrade to Pro" : plan === "pro" ? "Upgrade to Ultra" : "Manage Plan"}
+        </Link>
         <button type="button" onClick={onLogout} className="mt-4 text-sm text-slate-400 transition hover:text-white">
           Logout
         </button>
@@ -292,7 +295,7 @@ const MobileAppBar = ({
   onLogout: () => void;
 }) => (
   <div className="sticky top-0 z-30 -mx-3 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-[#05070A]/95 px-3 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:hidden">
-    <div className="flex items-center gap-2">
+    <Link href="/" aria-label="Go to SVA home" className="flex items-center gap-2 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50">
       <div className="grid h-9 w-9 place-items-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-xs font-semibold text-emerald-100">
         SVA
       </div>
@@ -300,7 +303,7 @@ const MobileAppBar = ({
         <p className="text-sm font-semibold text-white">SVA</p>
         <p className="text-[11px] text-slate-500">{plan.toUpperCase()} plan</p>
       </div>
-    </div>
+    </Link>
     <div className="flex items-center gap-2">
       <button
         type="button"

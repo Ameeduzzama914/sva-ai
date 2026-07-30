@@ -6,8 +6,14 @@
   color-scheme: dark;
   --sva-bg: #05070a;
   --sva-bg-soft: #080b10;
+  --sva-surface: rgba(255, 255, 255, 0.035);
+  --sva-surface-strong: #0b0f13;
+  --sva-border: rgba(255, 255, 255, 0.08);
   --sva-text: #e5edf5;
   --sva-muted: #8a96a8;
+  --sva-accent: #6ee7b7;
+  --sva-accent-strong: #34d399;
+  --sva-radius: 22px;
 }
 
 html,
@@ -22,6 +28,59 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input,
+textarea,
+select {
+  color-scheme: dark;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--sva-text);
+  box-shadow: 0 0 0 1000px #080b10 inset;
+  transition: background-color 9999s ease-out;
+}
+
+.sva-atmosphere {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(16, 185, 129, 0.09), transparent 32rem),
+    radial-gradient(circle at 86% 8%, rgba(52, 211, 153, 0.05), transparent 26rem),
+    var(--sva-bg);
+}
+
+.sva-field {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid var(--sva-border);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 0.75rem 0.875rem;
+  color: var(--sva-text);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.sva-field::placeholder {
+  color: #596579;
+}
+
+.sva-field:focus {
+  border-color: rgba(110, 231, 183, 0.5);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.1);
 }
 
 ::selection {

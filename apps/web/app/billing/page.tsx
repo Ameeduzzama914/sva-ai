@@ -74,7 +74,7 @@ export default function BillingPage() {
 
   if (!session) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#070b14] px-4 text-slate-100">
+      <main className="sva-atmosphere grid min-h-screen place-items-center px-4 text-slate-100">
         <Card className="max-w-md text-center">
           <h1 className="text-2xl font-semibold">Login required</h1>
           <p className="mt-2 text-sm text-slate-300">Please login before upgrading your SVA plan.</p>
@@ -87,13 +87,13 @@ export default function BillingPage() {
   const toneClass = status?.tone === "success" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100" : status?.tone === "error" ? "border-rose-500/40 bg-rose-500/10 text-rose-100" : "border-amber-500/40 bg-amber-500/10 text-amber-100";
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] text-slate-100">
+    <div className="sva-atmosphere min-h-screen text-slate-100">
       <div className="mx-auto flex max-w-[1600px]">
         <AppSidebar isLoggedIn remainingToday={usage?.remaining ?? planMeta[plan].limit} plan={plan} />
         <main className="min-w-0 flex-1 space-y-6 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-cyan-300">Billing</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200/75">Billing</p>
               <h1 className="mt-1 text-3xl font-semibold text-white">Usage & Plan</h1>
             </div>
             <Link href="/app"><Button variant="ghost">Go to Dashboard</Button></Link>
@@ -105,16 +105,16 @@ export default function BillingPage() {
             <Card title="Current Account" className="lg:col-span-1">
               <div className="space-y-3 text-sm text-slate-300">
                 <p>Email: <span className="text-slate-100">{email}</span></p>
-                <p>Plan: <Badge variant={plan === "ultra" ? "cyan" : plan === "pro" ? "violet" : "neutral"}>{planMeta[plan].label}</Badge></p>
+                <p>Plan: <Badge variant={plan === "free" ? "neutral" : "success"}>{planMeta[plan].label}</Badge></p>
                 <p>Daily limit: <span className="text-slate-100">{planMeta[plan].limit}</span></p>
                 <p>Remaining today: <span className="text-slate-100">{usage?.remaining ?? planMeta[plan].limit}</span></p>
               </div>
             </Card>
 
             {(["free", "pro", "ultra"] as UserPlan[]).map((item) => (
-              <Card key={item} title={planMeta[item].label} className={item === "pro" ? "border-violet-500/60 bg-violet-500/10" : ""}>
+              <Card key={item} title={planMeta[item].label} className={item === "pro" ? "border-emerald-300/30 bg-emerald-300/[0.055]" : ""}>
                 <div className="flex h-full flex-col gap-3 text-sm text-slate-300">
-                  <p className="text-2xl font-semibold text-violet-200">{planMeta[item].price}</p>
+                  <p className="text-2xl font-semibold text-emerald-100">{planMeta[item].price}</p>
                   <p>{planMeta[item].description}</p>
                   <p>{planMeta[item].limit} verifications/day</p>
                   {item === "free" ? (

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MarketingNav } from "../components/marketing-nav";
+import { SectionEyebrow } from "../components/public-shell";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { getSession } from "../lib/client-auth";
@@ -30,16 +31,13 @@ export default function HomePage() {
   const ctaHref = isAuthed ? "/app" : "/signup";
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100">
+    <div className="sva-atmosphere min-h-screen text-slate-100">
       <MarketingNav />
       <main className="pt-4 sm:pt-6">
         <section className="relative overflow-hidden border-b border-white/10">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(139,92,246,0.24),transparent_42%),radial-gradient(circle_at_82%_4%,rgba(34,211,238,0.16),transparent_38%)]" />
           <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-18">
             <div className="relative space-y-6">
-              <div className="inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200">
-                AI verification for high-stakes answers
-              </div>
+              <SectionEyebrow>AI verification for high-stakes answers</SectionEyebrow>
               <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
                 Stop trusting a single AI answer.
               </h1>
@@ -59,10 +57,10 @@ export default function HomePage() {
               </div>
             </div>
 
-            <Card id="demo" className="relative border-violet-500/30 bg-slate-950/75 shadow-[0_0_55px_rgba(139,92,246,0.18)] backdrop-blur">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Trust score preview</p>
+            <Card id="demo" className="relative border-emerald-300/20 bg-[#080b10]/85 shadow-[0_0_55px_rgba(16,185,129,0.10)] backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200/75">Illustrative preview · Example verification</p>
               <div className="mt-3 flex items-end gap-3">
-                <p className="text-5xl font-semibold text-violet-200">86</p>
+                <p className="text-5xl font-semibold text-emerald-200">86</p>
                 <p className="pb-2 text-sm text-slate-400">/100 confidence</p>
               </div>
               <div className="mt-5 grid gap-3 text-sm">
@@ -76,13 +74,13 @@ export default function HomePage() {
 
         <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
           <div className="max-w-2xl">
-            <p className="text-sm font-medium uppercase tracking-wide text-violet-300">How SVA Works</p>
+            <SectionEyebrow>How SVA Works</SectionEyebrow>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">From question to confidence in four steps</h2>
           </div>
           <div className="mt-7 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {steps.map(([number, title, copy]) => (
-              <Card key={title} className="border-slate-700/80 bg-slate-900/70 shadow-lg shadow-black/20 transition hover:-translate-y-1 hover:border-violet-400/45">
-                <p className="text-xs font-semibold text-cyan-300">{number}</p>
+              <Card key={title} className="transition hover:-translate-y-1 hover:border-emerald-300/25">
+                <p className="text-xs font-semibold text-emerald-200">{number}</p>
                 <h3 className="mt-3 text-base font-semibold text-white">{title}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-300">{copy}</p>
               </Card>
@@ -101,9 +99,9 @@ export default function HomePage() {
                 {singleAi.map((item) => <li key={item} className="rounded-lg border border-slate-800 bg-slate-950/45 px-3 py-2">{item}</li>)}
               </ul>
             </Card>
-            <Card title="SVA" className="border-violet-500/40 bg-violet-500/10 shadow-[0_0_40px_rgba(139,92,246,0.14)]">
+            <Card title="SVA" className="border-emerald-300/25 bg-emerald-300/[0.055] shadow-[0_0_40px_rgba(16,185,129,0.08)]">
               <ul className="space-y-3 text-sm text-slate-100">
-                {sva.map((item) => <li key={item} className="rounded-lg border border-violet-400/25 bg-slate-950/45 px-3 py-2 text-violet-100">{item}</li>)}
+                {sva.map((item) => <li key={item} className="rounded-lg border border-emerald-300/15 bg-slate-950/45 px-3 py-2 text-emerald-50">{item}</li>)}
               </ul>
             </Card>
           </div>
