@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AdminFeedbackRecord,
   AdminOverviewStats,
   AdminUserRecord,
@@ -17,8 +17,21 @@ export type AdminProviderHealth = {
   detail: string;
 };
 
+export type AdminOpenRouterHealth = {
+  configured: boolean;
+  managementConfigured: boolean;
+  keyValid: boolean | null;
+  balanceUsd: number | null;
+  warningThresholdUsd: number | null;
+  criticalThresholdUsd: number | null;
+  status: "not_configured" | "healthy" | "warning" | "critical" | "unknown";
+  message: string;
+  checkedAt: string;
+};
+
 export type AdminHealthPayload = {
   providers: AdminProviderHealth[];
+  openRouter: AdminOpenRouterHealth;
   dataSource: "live" | "placeholder";
 };
 
@@ -62,3 +75,4 @@ export type AdminPaymentsResponse = {
 export type AdminPlanUpdateBody = {
   plan: UserPlan;
 };
+

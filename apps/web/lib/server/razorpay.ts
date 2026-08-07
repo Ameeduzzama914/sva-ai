@@ -1,10 +1,11 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
+import { SVA_PLANS } from "../plans";
 
 export type PaidPlan = "pro" | "ultra";
 
 export const RAZORPAY_PLAN_PRICES: Record<PaidPlan, { amount: number; label: string; dailyLimit: number }> = {
-  pro: { amount: 100, label: "SVA Pro", dailyLimit: 50 },
-  ultra: { amount: 200, label: "SVA Ultra", dailyLimit: 150 }
+  pro: { amount: SVA_PLANS.pro.razorpayAmountPaise, label: "SVA Pro", dailyLimit: SVA_PLANS.pro.dailyVerificationLimit },
+  ultra: { amount: SVA_PLANS.ultra.razorpayAmountPaise, label: "SVA Ultra", dailyLimit: SVA_PLANS.ultra.dailyVerificationLimit }
 };
 
 export const isPaidPlan = (value: unknown): value is PaidPlan => value === "pro" || value === "ultra";

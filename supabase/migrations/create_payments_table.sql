@@ -1,4 +1,4 @@
-create table if not exists public.payments (
+﻿create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid,
   email text not null,
@@ -18,11 +18,13 @@ create index if not exists payments_status_created_at_idx on public.payments (st
 
 alter table public.payments enable row level security;
 
+drop policy if exists "Users can view their own payments" on public.payments;
 create policy "Users can view their own payments"
   on public.payments
   for select
   using (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) or user_id = auth.uid());
 
+drop policy if exists "Service role can manage payments" on public.payments;
 create policy "Service role can manage payments"
   on public.payments
   for all
@@ -31,3 +33,4 @@ create policy "Service role can manage payments"
 
 -- Admin/founder reads are performed by server-side service-role APIs.
 -- Do not expose RAZORPAY_KEY_SECRET or write payment rows from the browser.
+

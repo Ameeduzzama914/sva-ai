@@ -1,10 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminFeedback,
   fetchAdminHealth,
   fetchAdminLogs,
+  fetchAdminMetrics,
   fetchAdminOverview,
   fetchAdminPayments,
   fetchAdminUsers
@@ -21,6 +22,7 @@ import type {
 import { AdminFeedbackSection } from "./admin-feedback-section";
 import { AdminLogsSection } from "./admin-logs-section";
 import { AdminOverviewCards } from "./admin-overview-cards";
+import { AdminOperationalMetrics } from "./admin-operational-metrics";
 import { AdminPaymentsSection } from "./admin-payments-section";
 import { AdminPlanOverview } from "./admin-plan-overview";
 import { AdminSystemHealth } from "./admin-system-health";
@@ -39,22 +41,24 @@ export const AdminDashboard = () => {
   const [paymentSummary, setPaymentSummary] = useState<AdminPaymentsResponse["summary"] | null>(null);
   const [paymentsEmpty, setPaymentsEmpty] = useState<string | null>(null);
   const [health, setHealth] = useState<AdminHealthPayload | null>(null);
+  const [metrics, setMetrics] = useState<Record<string, any> | null>(null);
   const [apiConnected, setApiConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [apiNotice, setApiNotice] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
-    const [overviewRes, usersRes, feedbackRes, logsRes, paymentsRes, healthRes] = await Promise.all([
+    const [overviewRes, usersRes, feedbackRes, logsRes, paymentsRes, healthRes, metricsRes] = await Promise.all([
       fetchAdminOverview(),
       fetchAdminUsers(),
       fetchAdminFeedback(),
       fetchAdminLogs(),
       fetchAdminPayments(),
-      fetchAdminHealth()
+      fetchAdminHealth(),
+      fetchAdminMetrics()
     ]);
 
-    const connected = Boolean(overviewRes || usersRes || feedbackRes || logsRes || paymentsRes || healthRes);
+    const connected = Boolean(overviewRes || usersRes || feedbackRes || logsRes || paymentsRes || healthRes || metricsRes);
     setApiConnected(connected);
 
     if (!connected) {
@@ -102,7 +106,7 @@ export const AdminDashboard = () => {
       {apiNotice ? (
         <p className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">{apiNotice}</p>
       ) : null}
-      {loading ? <p className="text-sm text-slate-400">Loading founder analytics…</p> : null}
+      {loading ? <p className="text-sm text-slate-400">Loading founder analyticsâ€¦</p> : null}
 
       <section>
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest text-violet-300/90">Overview</h2>
@@ -119,7 +123,11 @@ export const AdminDashboard = () => {
 
       <AdminPlanOverview />
 
+      <AdminOperationalMetrics metrics={metrics} />
+
       <AdminSystemHealth health={health} />
     </div>
   );
 };
+
+

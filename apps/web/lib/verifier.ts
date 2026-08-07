@@ -1,4 +1,5 @@
-import { usesProModelLayer } from "./model-layer";
+﻿import { usesProModelLayer } from "./model-layer";
+import { getSvaPlan } from "./plans";
 import { buildProLayerResponses } from "./providers/pro-layer";
 import { callOpenRouter, OPENROUTER_MODELS } from "./providers/openrouter";
 import type { UserPlan } from "./server/store";
@@ -900,7 +901,8 @@ const buildFocusedRetrievalQueries = (prompt: string): string[] => {
 export const buildResponsesForPrompt = async (
   prompt: string,
   mode: VerificationMode = "fast",
-  plan: UserPlan = "free"
+  plan: UserPlan = "free",
+  comparisonMaxTokens?: number
 ): Promise<{
   responses: ModelResponse[];
   modelSources: PerModelSource[];
@@ -919,6 +921,7 @@ export const buildResponsesForPrompt = async (
     const normalizedQuality = Math.max(40, snippet.sourceQualityScore ?? sourceQualityForSnippet(snippet));
     return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
   });
+  const planConfig = getSvaPlan(plan);
   const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
 
   if (usesProModelLayer(plan)) {
@@ -926,7 +929,8 @@ export const buildResponsesForPrompt = async (
       contextPrompt,
       evidenceSnippets,
       retrievalModeUsed,
-      mode
+      mode,
+      responseMaxTokens: comparisonMaxTokens ?? planConfig.comparisonOutputTokenLimit
     });
     return {
       ...proFlow,
@@ -952,7 +956,7 @@ export const buildResponsesForPrompt = async (
       let lastFailure: Awaited<ReturnType<typeof callOpenRouter>> | undefined;
 
       for (const modelId of slot.modelSequence) {
-        const result = await callOpenRouter(modelId, contextPrompt);
+        const result = await callOpenRouter(modelId, contextPrompt, { maxTokens: comparisonMaxTokens ?? planConfig.comparisonOutputTokenLimit });
         if (result.ok) {
           return result;
         }
@@ -1007,6 +1011,11 @@ export const buildResponsesForPrompt = async (
       statusCode: getOpenRouterErrorStatus(outputs[0]),
       providerModelId: outputs[0]?.providerModelId,
       status: outputs[0]?.ok === true ? "success" : "failed",
+      actualModelId: outputs[0]?.ok === true ? outputs[0].actualModelId : undefined,
+      promptTokens: outputs[0]?.ok === true ? outputs[0].promptTokens : undefined,
+      completionTokens: outputs[0]?.ok === true ? outputs[0].completionTokens : undefined,
+      costUsd: outputs[0]?.ok === true ? outputs[0].costUsd : undefined,
+      latencyMs: outputs[0]?.latencyMs,
       rawResponse: outputs[0]?.ok === true ? outputs[0].text.slice(0, 1200) : undefined
     },
     "Balanced AI": {
@@ -1018,6 +1027,11 @@ export const buildResponsesForPrompt = async (
       statusCode: getOpenRouterErrorStatus(outputs[1]),
       providerModelId: outputs[1]?.providerModelId,
       status: outputs[1]?.ok === true ? "success" : "failed",
+      actualModelId: outputs[1]?.ok === true ? outputs[1].actualModelId : undefined,
+      promptTokens: outputs[1]?.ok === true ? outputs[1].promptTokens : undefined,
+      completionTokens: outputs[1]?.ok === true ? outputs[1].completionTokens : undefined,
+      costUsd: outputs[1]?.ok === true ? outputs[1].costUsd : undefined,
+      latencyMs: outputs[1]?.latencyMs,
       rawResponse: outputs[1]?.ok === true ? outputs[1].text.slice(0, 1200) : undefined
     },
     "Research AI": {
@@ -1029,6 +1043,11 @@ export const buildResponsesForPrompt = async (
       statusCode: getOpenRouterErrorStatus(outputs[2]),
       providerModelId: outputs[2]?.providerModelId,
       status: outputs[2]?.ok === true ? "success" : "failed",
+      actualModelId: outputs[2]?.ok === true ? outputs[2].actualModelId : undefined,
+      promptTokens: outputs[2]?.ok === true ? outputs[2].promptTokens : undefined,
+      completionTokens: outputs[2]?.ok === true ? outputs[2].completionTokens : undefined,
+      costUsd: outputs[2]?.ok === true ? outputs[2].costUsd : undefined,
+      latencyMs: outputs[2]?.latencyMs,
       rawResponse: outputs[2]?.ok === true ? outputs[2].text.slice(0, 1200) : undefined
     }
   };
@@ -1261,7 +1280,7 @@ export const verifyResponses = (
     contradictions: `${contradictionExplanation}. Outlier models: ${listModels(outlierModels)}. Disagreement type: ${contradiction.contradictionType}.`,
     scientificConsensusSummary: `${consensusLabel} with majority ${listModels(majorityModels)}${outlierModels.length ? ` and outliers ${listModels(outlierModels)}` : ""}.`
   };
-  const finalAnswer = `Quick Verdict: ${unified.verdict}\n${adjustedFinalConfidence}/100 Confidence\n${sections.coreConclusion}\n\nScientific Consensus: ${sections.scientificConsensusSummary}\n\nEvidence Summary:\n${sections.evidenceSummary}\n\nImportant Caveats: ${sections.risksAndCaveats}\n\nContradictions / Debates: ${sections.contradictions}\n\nFinal Confidence Assessment: ${adjustedFinalConfidence}/100 — ${unified.reliability} Reliability.`;
+  const finalAnswer = `Quick Verdict: ${unified.verdict}\n${adjustedFinalConfidence}/100 Confidence\n${sections.coreConclusion}\n\nScientific Consensus: ${sections.scientificConsensusSummary}\n\nEvidence Summary:\n${sections.evidenceSummary}\n\nImportant Caveats: ${sections.risksAndCaveats}\n\nContradictions / Debates: ${sections.contradictions}\n\nFinal Confidence Assessment: ${adjustedFinalConfidence}/100 â€” ${unified.reliability} Reliability.`;
 
   const reasoning = `All models were compared semantically. ${largestGroup.length}/${responses.length} responses clustered into the majority (agreement ${agreementScore}/100). Majority models: ${listModels(
     majorityModels
@@ -1450,3 +1469,7 @@ export const verifyResponses = (
     }
   };
 };
+
+
+
+

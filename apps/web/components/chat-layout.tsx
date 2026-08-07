@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { type ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -7,17 +7,17 @@ import {
   type ModelResponse,
   type PerModelSource,
   type VerificationExecutionMeta,
-  type VerificationMode,
   type VerificationResult,
   type VerifyApiResponse,
   type ModelName
 } from "../lib/models";
+import { SVA_PLANS } from "../lib/plans";
 import { ProviderLogo } from "./provider-logo";
 import { Badge } from "./ui/badge";
 
 type HistoryItem = {
   prompt: string;
-  mode: VerificationMode;
+  mode: "verified";
   resultSummary: string;
   timestamp: string;
   confidence: number;
@@ -39,9 +39,9 @@ type UserSession = {
 
 const visibleResponseModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
 const modelBadgeLabel: Record<ModelName, string> = {
-  "Fast AI": "Mistral 7B",
-  "Balanced AI": "Llama 3.1 8B",
-  "Research AI": "Gemma 7B"
+  "Fast AI": "GPT",
+  "Balanced AI": "Gemini",
+  "Research AI": "DeepSeek"
 };
 
 const navItems = ["New Query", "History", "Saved", "Models", "Settings"] as const;
@@ -52,7 +52,6 @@ export const ChatLayout = () => {
   const [user, setUser] = useState<UserSession | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [prompt, setPrompt] = useState(STARTER_PROMPT);
-  const [mode, setMode] = useState<VerificationMode>("fast");
   const [responses, setResponses] = useState<ModelResponse[]>([]);
   const [modelSources, setModelSources] = useState<PerModelSource[]>([]);
   const [evidenceSnippets, setEvidenceSnippets] = useState<EvidenceSnippet[]>([]);
@@ -135,7 +134,7 @@ export const ChatLayout = () => {
       const response = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, mode })
+        body: JSON.stringify({ prompt })
       });
       const data = (await response.json()) as VerifyApiResponse;
       if (!response.ok || !data.ok) {
@@ -195,12 +194,12 @@ export const ChatLayout = () => {
 
         <div className="pricing-card">
           <p>
-            <strong>Free:</strong> 10 verifications/day
+            <strong>Free:</strong> {SVA_PLANS.free.dailyVerificationLimit} Verified Mode runs/day
           </p>
           <p>
-            <strong>Pro Early Access:</strong> ₹499/month
+            <strong>Pro:</strong> Rs {SVA_PLANS.pro.priceInr}/month
           </p>
-          <p className="muted-line">Soon ₹999/month</p>
+          <p className="muted-line">Ultra: Rs {SVA_PLANS.ultra.priceInr}/month</p>
           <button className="run-button" type="button" onClick={goToPricing}>
             Upgrade
           </button>
@@ -291,11 +290,7 @@ export const ChatLayout = () => {
               </button>
             </div>
             <div className="chip-row">
-              {(["fast", "deep", "research"] as const).map((option) => (
-                <button key={option} type="button" className={mode === option ? "chip mode-chip active-mode" : "chip mode-chip"} onClick={() => setMode(option)}>
-                  {option === "fast" ? "Fast" : option === "deep" ? "Deep Verify" : "Research"}
-                </button>
-              ))}
+              <span className="chip mode-chip active-mode">Verified Mode</span>
             </div>
           </form>
         </section>
@@ -305,7 +300,7 @@ export const ChatLayout = () => {
             <h3>Verification Warnings</h3>
             <ul className="risk-list">
               {warnings.map((warning, idx) => (
-                <li key={`${warning}-${idx}`}>⚠️ {warning}</li>
+                <li key={`${warning}-${idx}`}>{warning}</li>
               ))}
             </ul>
           </section>
@@ -327,7 +322,7 @@ export const ChatLayout = () => {
                   <button key={`${item.timestamp}-${item.prompt}`} className="history-item" type="button" onClick={() => setPrompt(item.prompt)}>
                     <strong>{item.prompt}</strong>
                     <small>
-                      {item.confidence}% • {item.verdict} • {item.mode}
+                      {item.confidence}% - {item.verdict} - {item.mode}
                     </small>
                   </button>
                 ))}
@@ -348,7 +343,7 @@ export const ChatLayout = () => {
         <section className="panel">
           <h3>AI Responses (3-model comparison)</h3>
           {modelSources.filter((source) => source.source === "openrouter").length < 3 && responses.length > 0 ? (
-            <p className="muted-line">⚠️ Partial Verification: Only {modelSources.filter((source) => source.source === "openrouter").length}/3 models responded. Results may be unreliable.</p>
+            <p className="muted-line">Partial Verification: Only {modelSources.filter((source) => source.source === "openrouter").length}/3 models responded. Results may be unreliable.</p>
           ) : null}
           <div className="response-grid">
             {visibleResponseModels.map((modelName) => {
@@ -446,8 +441,8 @@ export const ChatLayout = () => {
                     <strong>{snippet.title}</strong>
                     <small>
                       {snippet.sourceType}
-                      {snippet.trustTier ? ` • ${snippet.trustTier}` : ""}
-                      {snippet.sourceDomain ? ` • ${snippet.sourceDomain}` : ""}
+                      {snippet.trustTier ? ` - ${snippet.trustTier}` : ""}
+                      {snippet.sourceDomain ? ` - ${snippet.sourceDomain}` : ""}
                     </small>
                     <p>{snippet.text}</p>
                     {snippet.url ? (
@@ -472,7 +467,7 @@ export const ChatLayout = () => {
                   <article className="history-item" key={claim.id}>
                     <strong>{claim.claim}</strong>
                     <small>
-                      {claim.status} • {claim.confidenceScore}/100 • {claim.category ?? "general"}
+                      {claim.status} - {claim.confidenceScore}/100 - {claim.category ?? "general"}
                     </small>
                     <p>{claim.explanation}</p>
                   </article>
@@ -501,7 +496,7 @@ export const ChatLayout = () => {
           <h3>Execution Debug</h3>
           {meta ? (
             <p className="muted-line">
-              Provider mode: {meta.mode} • Retrieval mode: {meta.retrievalModeUsed} • Sources: {meta.retrievalSourceCount} • Response quality: {meta.responseQualityFlag ?? "normal"}
+              Provider mode: {meta.mode} - Retrieval mode: {meta.retrievalModeUsed} - Sources: {meta.retrievalSourceCount} - Response quality: {meta.responseQualityFlag ?? "normal"}
             </p>
           ) : (
             <p className="muted-line">No execution metadata yet.</p>
@@ -511,3 +506,7 @@ export const ChatLayout = () => {
     </div>
   );
 };
+
+
+
+

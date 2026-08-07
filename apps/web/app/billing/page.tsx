@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { getSession, getSessionHeaders, getUsage, setSession } from "../../lib/client-auth";
+import { SVA_PLANS } from "../../lib/plans";
 import type { UserPlan } from "../../lib/server/store";
 
 type PaymentRecord = {
@@ -23,10 +24,10 @@ type PaymentRecord = {
   createdAt: string;
 };
 
-const planMeta: Record<UserPlan, { label: string; limit: number; price: string; description: string }> = {
-  free: { label: "Free Beta", limit: 10, price: "₹0", description: "Explore trusted AI verification." },
-  pro: { label: "Pro", limit: 50, price: "₹1/month", description: "For deeper verification workflows." },
-  ultra: { label: "Ultra", limit: 150, price: "₹2/month", description: "For higher daily verification capacity." }
+const planMeta: Record<UserPlan, { label: string; limit: number; monthlyLimit: number; price: string; description: string }> = {
+  free: { label: "Free", limit: SVA_PLANS.free.dailyVerificationLimit, monthlyLimit: SVA_PLANS.free.monthlyVerificationLimit, price: "₹0", description: "Verified Mode starter allowance." },
+  pro: { label: "Pro", limit: SVA_PLANS.pro.dailyVerificationLimit, monthlyLimit: SVA_PLANS.pro.monthlyVerificationLimit, price: "₹799/month", description: "Verified Mode for regular workflows." },
+  ultra: { label: "Ultra", limit: SVA_PLANS.ultra.dailyVerificationLimit, monthlyLimit: SVA_PLANS.ultra.monthlyVerificationLimit, price: "₹1,299/month", description: "Verified Mode with higher capacity." }
 };
 
 export default function BillingPage() {
@@ -34,6 +35,7 @@ export default function BillingPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [accountUsage, setAccountUsage] = useState<{ monthlyUsage?: number; monthlyLimit?: number; creditsResetAt?: string; billingPeriodEnd?: string; subscriptionStatus?: string } | null>(null);
   const session = getSession();
 
   const usage = useMemo(() => (email ? getUsage(email, plan) : null), [email, plan]);
@@ -56,11 +58,12 @@ export default function BillingPage() {
 
       try {
         const meResponse = await fetch("/api/auth/me", { headers: getSessionHeaders(), credentials: "include" });
-        const me = (await meResponse.json()) as { ok: boolean; user?: { email: string; plan: UserPlan; createdAt: string } | null };
+        const me = (await meResponse.json()) as { ok: boolean; user?: { email: string; plan: UserPlan; createdAt: string; monthlyUsage?: number; monthlyLimit?: number; creditsResetAt?: string; billingPeriodEnd?: string; subscriptionStatus?: string } | null };
         if (meResponse.ok && me.user) {
           setEmail(me.user.email);
           setPlan(me.user.plan);
           setSession({ email: me.user.email, plan: me.user.plan, createdAt: me.user.createdAt, planVerified: me.user.plan !== "free" });
+          setAccountUsage({ monthlyUsage: me.user.monthlyUsage, monthlyLimit: me.user.monthlyLimit, creditsResetAt: me.user.creditsResetAt, billingPeriodEnd: me.user.billingPeriodEnd, subscriptionStatus: me.user.subscriptionStatus });
         }
       } catch {
         setStatus({ tone: "warning", message: "Unable to refresh account details. Showing local session data." });
@@ -106,8 +109,13 @@ export default function BillingPage() {
               <div className="space-y-3 text-sm text-slate-300">
                 <p>Email: <span className="text-slate-100">{email}</span></p>
                 <p>Plan: <Badge variant={plan === "free" ? "neutral" : "success"}>{planMeta[plan].label}</Badge></p>
-                <p>Daily limit: <span className="text-slate-100">{planMeta[plan].limit}</span></p>
+                <p>Subscription status: <span className="text-slate-100">{accountUsage?.subscriptionStatus ?? "active"}</span></p>
                 <p>Remaining today: <span className="text-slate-100">{usage?.remaining ?? planMeta[plan].limit}</span></p>
+                <p>Daily limit: <span className="text-slate-100">{planMeta[plan].limit}</span></p>
+                <p>Remaining this billing period: <span className="text-slate-100">{Math.max(0, (accountUsage?.monthlyLimit ?? planMeta[plan].monthlyLimit) - (accountUsage?.monthlyUsage ?? 0))}</span></p>
+                <p>Monthly limit: <span className="text-slate-100">{accountUsage?.monthlyLimit ?? planMeta[plan].monthlyLimit}</span></p>
+                <p>Next daily reset: <span className="text-slate-100">{accountUsage?.creditsResetAt ? new Date(accountUsage.creditsResetAt).toLocaleString() : "Upcoming"}</span></p>
+                <p>Billing-period end: <span className="text-slate-100">{accountUsage?.billingPeriodEnd ? new Date(accountUsage.billingPeriodEnd).toLocaleString() : "Calendar month"}</span></p>
               </div>
             </Card>
 
@@ -116,7 +124,8 @@ export default function BillingPage() {
                 <div className="flex h-full flex-col gap-3 text-sm text-slate-300">
                   <p className="text-2xl font-semibold text-emerald-100">{planMeta[item].price}</p>
                   <p>{planMeta[item].description}</p>
-                  <p>{planMeta[item].limit} verifications/day</p>
+                  <p>{item === "free" ? "2/day" : item === "pro" ? "8/day" : "15/day"}</p>
+                  <p>{item === "free" ? "30/month" : item === "pro" ? "200/billing period" : "450/billing period"}</p>
                   {item === "free" ? (
                     <Link href="/app" className="mt-auto"><Button className="w-full">Start Free</Button></Link>
                   ) : plan === item ? (
@@ -155,7 +164,7 @@ export default function BillingPage() {
                     {payments.map((payment) => (
                       <tr key={payment.id} className="border-b border-slate-900/80 text-slate-300">
                         <td className="py-3 capitalize">{payment.plan}</td>
-                        <td>₹{Math.round(payment.amount / 100)}</td>
+                        <td>₹{Math.round(payment.amount / 100).toLocaleString("en-IN")}</td>
                         <td><Badge variant={payment.status === "success" ? "success" : "danger"}>{payment.status}</Badge></td>
                         <td>{new Date(payment.createdAt).toLocaleString()}</td>
                         <td>{payment.razorpayPaymentId ?? "-"}</td>
@@ -173,3 +182,5 @@ export default function BillingPage() {
     </div>
   );
 }
+
+

@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getSession, getSessionHeaders, setPlanIntent, setSession } from "../lib/client-auth";
+import { SVA_PLANS } from "../lib/plans";
 import type { UserPlan } from "../lib/server/store";
 import { Button } from "./ui/button";
 
@@ -60,8 +61,8 @@ type Props = {
 };
 
 const descriptions: Record<PaidPlan, string> = {
-  pro: "SVA Pro - 50 verifications/day",
-  ultra: "SVA Ultra - 150 verifications/day"
+  pro: `SVA Pro - ${SVA_PLANS.pro.dailyVerificationLimit} Verified Mode runs/day`,
+  ultra: `SVA Ultra - ${SVA_PLANS.ultra.dailyVerificationLimit} Verified Mode runs/day`
 };
 
 const loadRazorpayScript = async (): Promise<boolean> => {
@@ -224,3 +225,4 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
     </Button>
   );
 };
+

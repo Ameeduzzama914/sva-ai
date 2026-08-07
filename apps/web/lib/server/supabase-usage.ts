@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+﻿import { randomUUID } from "crypto";
 import type { UserPlan } from "./store";
 import { getPlanDailyVerificationLimit } from "./plan-limits";
 import { getSupabaseAdminClient } from "./supabase-admin";
@@ -42,7 +42,7 @@ export const consumeSupabaseDailyVerificationQuota = async (
   const plan = isUserPlan(record.plan) ? record.plan : "free";
   const dailyLimit = getPlanDailyVerificationLimit(plan);
   const usedToday = pickNumber(record.daily_usage);
-  const creditsRemaining = pickNumber(record.credits_remaining, dailyLimit);
+  const creditsRemaining = pickNumber(record.credits_remaining, Math.max(0, dailyLimit - usedToday));
 
   if (usedToday >= dailyLimit || creditsRemaining < creditsUsed) {
     return { ok: false, usedToday, dailyLimit, creditsRemaining, plan };
@@ -79,6 +79,48 @@ export const consumeSupabaseDailyVerificationQuota = async (
     creditsRemaining: pickNumber(updatedRow.credits_remaining, nextCreditsRemaining),
     plan
   };
+};
+
+export const refundSupabaseDailyVerificationQuota = async (userId: string, creditsUsed: number): Promise<boolean> => {
+  const client = getSupabaseAdminClient();
+  if (!client || !userId) return false;
+
+  const { data: row, error: readError } = await client
+    .from("sva_users")
+    .select("user_id, id, plan, usage_count, daily_usage, monthly_usage, credits_remaining")
+    .or(`user_id.eq.${userId},id.eq.${userId}`)
+    .maybeSingle();
+
+  if (readError || !row) {
+    if (readError) console.error("[supabase-usage] read for refund:", readError.message);
+    return false;
+  }
+
+  const record = row as Row;
+  const plan = isUserPlan(record.plan) ? record.plan : "free";
+  const dailyLimit = getPlanDailyVerificationLimit(plan);
+  const nextDailyUsage = Math.max(0, pickNumber(record.daily_usage) - 1);
+  const nextMonthlyUsage = Math.max(0, pickNumber(record.monthly_usage) - 1);
+  const nextUsageCount = Math.max(0, pickNumber(record.usage_count) - 1);
+  const nextCreditsRemaining = Math.min(dailyLimit, pickNumber(record.credits_remaining) + creditsUsed);
+
+  const { error } = await client
+    .from("sva_users")
+    .update({
+      daily_usage: nextDailyUsage,
+      monthly_usage: nextMonthlyUsage,
+      usage_count: nextUsageCount,
+      credits_remaining: nextCreditsRemaining,
+      updated_at: new Date().toISOString()
+    })
+    .or(`user_id.eq.${userId},id.eq.${userId}`);
+
+  if (error) {
+    console.error("[supabase-usage] refund quota:", error.message);
+    return false;
+  }
+
+  return true;
 };
 
 export const insertSupabaseVerificationLog = async (input: {

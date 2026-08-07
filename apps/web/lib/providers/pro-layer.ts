@@ -1,4 +1,4 @@
-import {
+﻿import {
   type EvidenceSnippet,
   type ModelAnswerSource,
   type ModelFallbackState,
@@ -9,51 +9,82 @@ import {
   type VerificationExecutionMeta,
   type VerificationMode
 } from "../models";
-import { callOpenRouter } from "./openrouter";
+import { callOpenRouter, type OpenRouterResult } from "./openrouter";
 
 type ProSlot = {
   slot: ModelName;
-  envKey: "PRO_OPENROUTER_MODEL_A" | "PRO_OPENROUTER_MODEL_B" | "PRO_OPENROUTER_MODEL_C";
-  fallbackChain: readonly string[];
-  defaultModelId: string;
+  family: "gpt" | "gemini" | "deepseek";
+  primaryEnvKey: string;
+  fallbackEnvKey: string;
+  legacyEnvKey?: string;
+  defaultPrimaryModelId: string;
+  defaultFallbackModelId?: string;
   maxTokens?: number;
-  envConfigured: () => boolean;
 };
 
 const PRO_SLOTS: ProSlot[] = [
   {
     slot: "Fast AI",
-    envKey: "PRO_OPENROUTER_MODEL_A",
-    fallbackChain: ["openai/gpt-4.1-mini", "openai/gpt-4o-mini"],
-    defaultModelId: "openai/gpt-4.1-mini",
-    envConfigured: () => Boolean(process.env.PRO_OPENROUTER_MODEL_A)
+    family: "gpt",
+    primaryEnvKey: "SVA_GPT_PRIMARY",
+    fallbackEnvKey: "SVA_GPT_FALLBACK",
+    legacyEnvKey: "PRO_OPENROUTER_MODEL_A",
+    defaultPrimaryModelId: "openai/gpt-4.1-mini",
+    defaultFallbackModelId: "openai/gpt-4.1-nano"
   },
   {
     slot: "Balanced AI",
-    envKey: "PRO_OPENROUTER_MODEL_B",
-    fallbackChain: ["google/gemini-2.5-flash", "~google/gemini-flash-latest"],
-    defaultModelId: "google/gemini-2.5-flash",
-    maxTokens: 2048,
-    envConfigured: () => Boolean(process.env.PRO_OPENROUTER_MODEL_B)
+    family: "gemini",
+    primaryEnvKey: "SVA_GEMINI_PRIMARY",
+    fallbackEnvKey: "SVA_GEMINI_FALLBACK",
+    legacyEnvKey: "PRO_OPENROUTER_MODEL_B",
+    defaultPrimaryModelId: "google/gemini-2.5-flash",
+    defaultFallbackModelId: "google/gemini-2.5-flash-lite"
   },
   {
     slot: "Research AI",
-    envKey: "PRO_OPENROUTER_MODEL_C",
-    fallbackChain: ["deepseek/deepseek-chat-v3-0324", "deepseek/deepseek-chat"],
-    defaultModelId: "deepseek/deepseek-chat-v3-0324",
-    envConfigured: () => Boolean(process.env.PRO_OPENROUTER_MODEL_C)
+    family: "deepseek",
+    primaryEnvKey: "SVA_DEEPSEEK_PRIMARY",
+    fallbackEnvKey: "SVA_DEEPSEEK_FALLBACK",
+    legacyEnvKey: "PRO_OPENROUTER_MODEL_C",
+    defaultPrimaryModelId: "deepseek/deepseek-chat"
   }
 ];
 
-type ProResult = Awaited<ReturnType<typeof callOpenRouter>>;
+const toAnswerSource = (result: OpenRouterResult): ModelAnswerSource => (result.ok ? "openrouter" : "fallback_generated");
 
-const toAnswerSource = (result: ProResult): ModelAnswerSource => (result.ok ? "openrouter" : "fallback_generated");
-
-const toFallbackState = (result: ProResult): ModelFallbackState => {
-  if (result.ok) {
-    return "none";
-  }
+const toFallbackState = (result: OpenRouterResult): ModelFallbackState => {
+  if (result.ok) return "none";
   return result.reason === "not_configured" ? "provider_unavailable" : "provider_error";
+};
+
+const modelSequenceForSlot = (slot: ProSlot): string[] => {
+  const primary = process.env[slot.primaryEnvKey]?.trim() || (slot.legacyEnvKey ? process.env[slot.legacyEnvKey]?.trim() : "") || slot.defaultPrimaryModelId;
+  const fallback = process.env[slot.fallbackEnvKey]?.trim() || slot.defaultFallbackModelId || "";
+  return Array.from(new Set([primary, fallback].filter(Boolean)));
+};
+
+const runSlot = async (slot: ProSlot, contextPrompt: string, responseMaxTokens?: number): Promise<OpenRouterResult & { attemptedFallback: boolean }> => {
+  const sequence = modelSequenceForSlot(slot).slice(0, 2);
+  let lastFailure: Extract<OpenRouterResult, { ok: false }> | undefined;
+
+  for (let index = 0; index < sequence.length; index += 1) {
+    const result = await callOpenRouter(sequence[index], contextPrompt, { maxTokens: slot.maxTokens ?? responseMaxTokens });
+    if (result.ok) return { ...result, attemptedFallback: index > 0 };
+    lastFailure = result;
+    if (result.errorType === "billing_failure" || result.errorType === "configuration_failure") break;
+  }
+
+  return {
+    ok: false,
+    message: lastFailure?.message ?? "AI model request failed.",
+    reason: lastFailure?.reason ?? "provider_error",
+    errorType: lastFailure?.errorType ?? "provider_error",
+    statusCode: lastFailure?.statusCode,
+    providerModelId: lastFailure?.providerModelId ?? sequence[0] ?? slot.defaultPrimaryModelId,
+    providerError: lastFailure?.providerError,
+    attemptedFallback: sequence.length > 1
+  };
 };
 
 export type ProLayerContext = {
@@ -61,13 +92,15 @@ export type ProLayerContext = {
   evidenceSnippets: EvidenceSnippet[];
   retrievalModeUsed: "web" | "none";
   mode: VerificationMode;
+  responseMaxTokens?: number;
 };
 
 export const buildProLayerResponses = async ({
   contextPrompt,
   evidenceSnippets,
   retrievalModeUsed,
-  mode
+  mode,
+  responseMaxTokens
 }: ProLayerContext): Promise<{
   responses: ModelResponse[];
   modelSources: PerModelSource[];
@@ -75,35 +108,23 @@ export const buildProLayerResponses = async ({
   meta: VerificationExecutionMeta;
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
 }> => {
-  const outputs = await Promise.all(
-    PRO_SLOTS.map(async (slot) => {
-      const configuredModel = process.env[slot.envKey]?.trim();
-      const modelSequence = [configuredModel, ...slot.fallbackChain].filter((item): item is string => Boolean(item && item.length > 0));
-      let lastFailure: ProResult | undefined;
-
-      for (const modelId of modelSequence) {
-        const result = await callOpenRouter(modelId, contextPrompt, slot.maxTokens ? { maxTokens: slot.maxTokens } : undefined);
-        if (result.ok) {
-          return result;
-        }
-        lastFailure = result;
-      }
-
-      const fallbackFailure: ProResult = {
-        ok: false,
-        message: "AI model request failed.",
-        reason: "provider_error",
-        providerModelId: slot.defaultModelId
-      };
-      return lastFailure ?? fallbackFailure;
-    })
-  );
+  const settled = await Promise.allSettled(PRO_SLOTS.map((slot) => runSlot(slot, contextPrompt, responseMaxTokens)));
+  const outputs = settled.map((result, index): OpenRouterResult & { attemptedFallback: boolean } => {
+    if (result.status === "fulfilled") return result.value;
+    return {
+      ok: false,
+      message: "AI model request failed.",
+      reason: "provider_error",
+      errorType: "provider_unavailable",
+      providerModelId: modelSequenceForSlot(PRO_SLOTS[index])[0] ?? PRO_SLOTS[index].defaultPrimaryModelId,
+      providerError: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      attemptedFallback: false
+    };
+  });
 
   const responses: ModelResponse[] = PRO_SLOTS.map((slot, index) => {
     const result = outputs[index];
-    if (result.ok) {
-      return { model: slot.slot, answer: result.text.replace(/\s+/g, " ").trim() || "No response generated." };
-    }
+    if (result.ok) return { model: slot.slot, answer: result.text.replace(/\s+/g, " ").trim() || "No response generated." };
     return { model: slot.slot, answer: "" };
   });
 
@@ -113,9 +134,10 @@ export const buildProLayerResponses = async ({
       model: slot.slot,
       source: toAnswerSource(result),
       fallbackState: toFallbackState(result),
-      providerModelId: result.providerModelId ?? process.env[slot.envKey]?.trim() ?? slot.defaultModelId,
+      providerModelId: result.providerModelId ?? modelSequenceForSlot(slot)[0] ?? slot.defaultPrimaryModelId,
       errorMessage: result.ok ? undefined : result.message,
-      statusCode: result.ok ? undefined : result.statusCode
+      statusCode: result.ok ? undefined : result.statusCode,
+      providerErrorType: result.ok ? undefined : result.errorType
     };
   });
 
@@ -123,14 +145,20 @@ export const buildProLayerResponses = async ({
     (status, slot, index) => {
       const result = outputs[index];
       status[slot.slot] = {
-        configured: slot.envConfigured(),
+        configured: Boolean(process.env.OPENROUTER_API_KEY),
         liveSuccess: result.ok,
         source: toAnswerSource(result),
         fallbackState: toFallbackState(result),
         errorMessage: result.ok ? undefined : result.message,
         statusCode: result.ok ? undefined : result.statusCode,
-        providerModelId: result.providerModelId ?? process.env[slot.envKey]?.trim() ?? slot.defaultModelId,
-        status: result.ok ? "success" : "failed",
+        providerErrorType: result.ok ? undefined : result.errorType,
+        providerModelId: result.providerModelId ?? modelSequenceForSlot(slot)[0] ?? slot.defaultPrimaryModelId,
+        actualModelId: result.ok ? result.actualModelId : undefined,
+        promptTokens: result.ok ? result.promptTokens : undefined,
+        completionTokens: result.ok ? result.completionTokens : undefined,
+        costUsd: result.ok ? result.costUsd : undefined,
+        status: result.ok ? (result.attemptedFallback ? "fallback" : "success") : result.statusCode === 408 || result.statusCode === 504 ? "timeout" : "failed",
+        latencyMs: result.latencyMs,
         rawResponse: result.ok ? result.text.slice(0, 1200) : undefined
       };
       return status;
@@ -154,9 +182,16 @@ export const buildProLayerResponses = async ({
       modelASource: toAnswerSource(outputs[0]),
       modelBSource: toAnswerSource(outputs[1]),
       modelCSource: toAnswerSource(outputs[2]),
-      providerMessage: `Live Pro model responses returned for ${liveCount} of 3 providers.`,
+      providerMessage: `Live central OpenRouter responses returned for ${liveCount} of 3 model families.`,
       retrievalModeUsed,
       retrievalSourceCount: evidenceSnippets.length
     }
   };
 };
+
+
+
+
+
+
+

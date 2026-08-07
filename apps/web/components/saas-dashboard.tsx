@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -35,7 +35,6 @@ const visibleModels: ModelName[] = ["Fast AI", "Balanced AI", "Research AI"];
 
 type HistoryItem = {
   prompt: string;
-  mode: VerificationMode;
   resultSummary: string;
   timestamp: string;
   confidence: number;
@@ -412,19 +411,15 @@ const EmptyVerificationState = ({ onSelectPrompt }: { onSelectPrompt: (prompt: s
 
 const VerificationComposer = ({
   prompt,
-  mode,
   isLoading,
   disabled,
   onPromptChange,
-  onModeChange,
   onSubmit
 }: {
   prompt: string;
-  mode: VerificationMode;
   isLoading: boolean;
   disabled: boolean;
   onPromptChange: (value: string) => void;
-  onModeChange: (mode: VerificationMode) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) => (
   <ShellPanel className="border-emerald-300/10">
@@ -441,20 +436,8 @@ const VerificationComposer = ({
         className="min-h-32 w-full resize-y rounded-[20px] border border-white/[0.08] bg-[#080B10] px-4 py-4 text-base leading-7 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-emerald-300/40 focus:ring-2 focus:ring-emerald-300/10"
       />
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-2xl border border-white/[0.08] bg-white/[0.025] p-1">
-          {(["fast", "deep", "research"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onModeChange(option)}
-              className={cx(
-                "rounded-xl px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40",
-                mode === option ? "bg-white/[0.08] text-white" : "text-slate-500 hover:text-slate-200"
-              )}
-            >
-              {option === "fast" ? "Fast" : option === "deep" ? "Deep" : "Research"}
-            </button>
-          ))}
+        <div className="flex min-h-10 items-center rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.08] px-3 text-sm font-semibold text-emerald-100">
+          Verified Mode
         </div>
         <div className="flex items-center gap-3">
           <p className="hidden text-xs text-slate-500 sm:block">SVA can make mistakes. Verify critical information.</p>
@@ -786,7 +769,6 @@ const ClaimsPanel = ({ verification }: { verification: VerificationResult | null
 export const SaasDashboard = () => {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
-  const [mode, setMode] = useState<VerificationMode>("deep");
   const [responses, setResponses] = useState<ModelResponse[]>([]);
   const [modelSources, setModelSources] = useState<PerModelSource[]>([]);
   const [evidenceSnippets, setEvidenceSnippets] = useState<EvidenceSnippet[]>([]);
@@ -888,7 +870,7 @@ export const SaasDashboard = () => {
       const response = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getSessionHeaders() },
-        body: JSON.stringify({ prompt, mode })
+        body: JSON.stringify({ prompt })
       });
       const data = (await response.json()) as VerifyApiResponse;
       if (!response.ok || !data.ok) {
@@ -1022,11 +1004,9 @@ ${evidenceReport}
                 {!hasRunVerification && !prompt ? <EmptyVerificationState onSelectPrompt={setPrompt} /> : null}
                 <VerificationComposer
                   prompt={prompt}
-                  mode={mode}
                   isLoading={isLoading}
                   disabled={disabledByQuota}
                   onPromptChange={handlePromptChange}
-                  onModeChange={setMode}
                   onSubmit={handleVerify}
                 />
                 <QueryCard prompt={prompt} hasRun={hasRunVerification && Boolean(prompt)} />
@@ -1098,3 +1078,4 @@ ${evidenceReport}
     </div>
   );
 };
+

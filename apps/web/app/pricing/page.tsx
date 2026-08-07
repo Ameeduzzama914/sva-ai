@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { isAdminEmail } from "../../lib/admin";
 import { getSession, setPlanIntent } from "../../lib/client-auth";
+import { SVA_PLANS } from "../../lib/plans";
 import type { UserPlan } from "../../lib/server/store";
 
 type Plan = {
@@ -24,23 +25,33 @@ type Plan = {
   featured: boolean;
 };
 
+const formatPrice = (plan: UserPlan) => {
+  const price = SVA_PLANS[plan].priceInr;
+  return price === 0 ? "Rs 0" : `Rs ${price}/month`;
+};
+
+const allowanceFeature = (plan: UserPlan) => {
+  const config = SVA_PLANS[plan];
+  return `${config.dailyVerificationLimit} Verified Mode runs/day, ${config.monthlyVerificationLimit}/billing period`;
+};
+
 const plans: Plan[] = [
   {
     key: "free",
     name: "Free Beta",
-    price: "₹0",
+    price: formatPrice("free"),
     description: "Best for exploring trusted AI verification.",
-    features: ["10 verifications/day", "Compare 3 AI models", "Mistral + Llama + Gemma", "Basic trust analysis", "Evidence retrieval", "Contradiction summary", "Verification history"],
-    chips: ["Mistral", "Llama", "Gemma"],
+    features: [allowanceFeature("free"), "Verified Mode only", "Three-model comparison", "Basic confidence and disagreement display", "Evidence retrieval when configured", "Verification history"],
+    chips: ["GPT", "Gemini", "DeepSeek"],
     ctaLabel: "Start Free",
     featured: false
   },
   {
     key: "pro",
     name: "Pro",
-    price: "₹1/month",
+    price: formatPrice("pro"),
     description: "For deeper verification and advanced trust workflows.",
-    features: ["50 verifications/day", "GPT + Gemini + DeepSeek", "Advanced trust scoring", "Deep evidence verification", "Enhanced contradiction analysis", "Faster verification speed", "Verification history"],
+    features: [allowanceFeature("pro"), "Verified Mode only", "GPT + Gemini + DeepSeek", "Final verified synthesis", "Confidence and disagreement analysis", "Saved history", "Standard priority"],
     chips: ["GPT", "Gemini", "DeepSeek"],
     ctaLabel: "Upgrade to Pro",
     featured: true
@@ -48,9 +59,9 @@ const plans: Plan[] = [
   {
     key: "ultra",
     name: "Ultra",
-    price: "₹2/month",
-    description: "For power users who need higher daily verification capacity.",
-    features: ["150 verifications/day", "Up to 4,500 verifications/month", "GPT + Gemini + DeepSeek", "Priority verification capacity", "Export-ready reports", "Advanced contradiction review", "Early access to premium verification tools"],
+    price: formatPrice("ultra"),
+    description: "For power users who need higher verification capacity.",
+    features: [allowanceFeature("ultra"), "Verified Mode only", "GPT + Gemini + DeepSeek", "Final verified synthesis", "Longer questions", "Priority processing", "Saved history"],
     chips: ["GPT", "Gemini", "DeepSeek"],
     ctaLabel: "Upgrade to Ultra",
     featured: false
@@ -74,8 +85,8 @@ export default function PricingPage() {
       <main className="mx-auto max-w-6xl px-4 pb-14 pt-20 sm:px-6">
         <div className="mx-auto mb-10 max-w-2xl text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200/75">Pricing</p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white">Pricing for every trust workflow</h1>
-          <p className="mt-3 leading-7 text-slate-400">Choose the verification depth, model access, and daily capacity that match how often you need confidence-backed answers.</p>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white">Pricing for Verified Mode</h1>
+          <p className="mt-3 leading-7 text-slate-400">Every plan uses SVA's shared verification pipeline with central model access and one clear allowance.</p>
         </div>
 
         <div className={`grid gap-5 ${showAdminEntry ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"}`}>
@@ -97,7 +108,7 @@ export default function PricingPage() {
                   ))}
                 </div>
                 <ul className="space-y-2 text-sm text-slate-300">
-                  {plan.features.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-300">✓</span><span>{feature}</span></li>)}
+                  {plan.features.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-300">-</span><span>{feature}</span></li>)}
                 </ul>
                 {plan.key === "free" ? (
                   <Button variant="secondary" className="mt-auto w-full" onClick={chooseFree}>{plan.ctaLabel}</Button>
@@ -126,10 +137,10 @@ export default function PricingPage() {
                 <p className="text-sm text-slate-300">Founder control center for users, plans, usage, feedback, and system health.</p>
                 <div className="flex flex-wrap gap-2"><Badge variant="neutral">Not a customer plan</Badge><Badge variant="neutral">No billing</Badge></div>
                 <ul className="space-y-2 text-sm text-slate-300">
-                  <li>• User & plan management</li>
-                  <li>• Verification logs</li>
-                  <li>• Feedback viewer</li>
-                  <li>• System health panel</li>
+                  <li>User & plan management</li>
+                  <li>Verification logs</li>
+                  <li>Feedback viewer</li>
+                  <li>System health panel</li>
                 </ul>
                 <Button variant="primary" className="mt-auto w-full" onClick={() => router.push("/admin")}>Open Admin Dashboard</Button>
               </div>
@@ -139,7 +150,7 @@ export default function PricingPage() {
 
         <section className="mt-10">
           <Card title="Usage tracker" className="border-slate-700/80 bg-slate-900/70">
-            <p className="text-sm leading-6 text-slate-300">Free Beta includes 10 verifications/day, Pro includes 50/day, and Ultra includes 150/day. Usage updates as you run verification.</p>
+            <p className="text-sm leading-6 text-slate-300">Free includes {SVA_PLANS.free.dailyVerificationLimit}/day, Pro includes {SVA_PLANS.pro.dailyVerificationLimit}/day, and Ultra includes {SVA_PLANS.ultra.dailyVerificationLimit}/day. Successful verifications use exactly one allowance unit.</p>
           </Card>
         </section>
         {msg ? <p className="mt-4 text-sm text-amber-300">{msg}</p> : null}

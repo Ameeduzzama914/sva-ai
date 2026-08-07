@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AdminFeedbackResponse,
   AdminHealthPayload,
   AdminLogsResponse,
@@ -7,19 +7,14 @@ import type {
   AdminPlanUpdateBody,
   AdminUsersResponse
 } from "./admin-types";
-import { getSession } from "./client-auth";
 import type { UserPlan } from "./server/store";
 
-const ADMIN_EMAIL_HEADER = "x-sva-admin-email";
-
 const adminFetch = async <T>(path: string, init?: RequestInit): Promise<T | null> => {
-  const sessionEmail = typeof window !== "undefined" ? getSession()?.email : undefined;
   const response = await fetch(path, {
     ...init,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(sessionEmail ? { [ADMIN_EMAIL_HEADER]: sessionEmail } : {}),
       ...(init?.headers ?? {})
     }
   });
@@ -51,3 +46,6 @@ export const updateAdminUserPlan = (userId: string, plan: UserPlan) =>
 
 export const resetAdminUserUsage = (userId: string) =>
   adminFetch<{ ok: true }>(`/api/admin/users/${userId}/reset-usage`, { method: "POST" });
+
+export const fetchAdminMetrics = () => adminFetch<{ ok: true; metrics: Record<string, any> }>("/api/admin/metrics");
+

@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+﻿import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   AdminFeedbackRecord,
   AdminOverviewStats,
@@ -7,6 +7,7 @@ import type {
   PublicUser,
   UserPlan
 } from "./store";
+import { getSvaPlan } from "../plans";
 
 type Row = Record<string, unknown>;
 
@@ -115,7 +116,7 @@ const nextResetAt = (plan: UserPlan): string => {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)).toISOString();
 };
 
-const planCreditLimit = (plan: UserPlan): number => (plan === "free" ? 15 : plan === "pro" ? 50 : 150);
+const planCreditLimit = (plan: UserPlan): number => getSvaPlan(plan).dailyVerificationLimit;
 
 const mapPublicUserRow = (row: Row): PublicUser | null => {
   const email = pickString(row, ["email"]).trim().toLowerCase();
@@ -377,3 +378,4 @@ export const fetchAdminLogsFromSupabase = async (): Promise<AdminVerificationLog
     .map((row) => mapLogRow(row, emailByUserId))
     .filter((row): row is AdminVerificationLog => row !== null);
 };
+

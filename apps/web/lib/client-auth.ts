@@ -1,3 +1,5 @@
+﻿import { SVA_PLANS } from "./plans";
+
 export type UserPlan = "free" | "pro" | "ultra";
 
 export type ClientSession = {
@@ -45,10 +47,7 @@ export const getSession = (): ClientSession | null => {
 
 export const setSession = (session: ClientSession) => localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 export const logout = () => localStorage.removeItem(SESSION_KEY);
-export const getSessionHeaders = (): Record<string, string> => {
-  const session = getSession();
-  return session?.email ? { "x-sva-session-email": session.email } : {};
-};
+export const getSessionHeaders = (): Record<string, string> => ({});
 
 export const setPlanIntent = (plan: UserPlan) => localStorage.setItem(PLAN_INTENT_KEY, plan);
 export const getPlanIntent = (): UserPlan | null => {
@@ -79,7 +78,7 @@ export const loginUser = (email: string, password: string): { ok: boolean; plan?
     };
 };
 
-const getPlanLimit = (plan: ClientSession["plan"]): number => (plan === "free" ? 10 : plan === "pro" ? 50 : 150);
+const getPlanLimit = (plan: ClientSession["plan"]): number => SVA_PLANS[plan].dailyVerificationLimit;
 
 export const getUsage = (email: string, plan: ClientSession["plan"] = "free") => {
   const key = `${USAGE_KEY}_${email.toLowerCase()}_${new Date().toISOString().slice(0, 10)}`;
@@ -92,3 +91,4 @@ export const incrementUsage = (email: string, plan: ClientSession["plan"] = "fre
   const usage = getUsage(email, plan);
   localStorage.setItem(usage.key, String(usage.used + 1));
 };
+

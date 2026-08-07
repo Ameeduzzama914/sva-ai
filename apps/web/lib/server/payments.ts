@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+﻿import { randomUUID } from "crypto";
 import type { PaidPlan } from "./razorpay";
 import { RAZORPAY_PLAN_PRICES } from "./razorpay";
 import { getSupabaseAdminClient } from "./supabase-admin";
@@ -72,6 +72,11 @@ export const insertPaymentRecord = async (input: {
   status: PaymentStatus;
   provider?: string;
   source?: string;
+  billingTransactionId?: string;
+  razorpayInvoiceId?: string;
+  razorpaySubscriptionId?: string;
+  billingPeriodStart?: string;
+  billingPeriodEnd?: string;
 }): Promise<boolean> => {
   const client = getSupabaseAdminClient();
   if (!client) return false;
@@ -92,7 +97,12 @@ export const insertPaymentRecord = async (input: {
   const payload = {
     ...basePayload,
     provider: input.provider ?? "razorpay",
-    source: input.source ?? "razorpay_checkout"
+    source: input.source ?? "razorpay_checkout",
+    billing_transaction_id: input.billingTransactionId ?? input.razorpayPaymentId ?? null,
+    razorpay_invoice_id: input.razorpayInvoiceId ?? null,
+    razorpay_subscription_id: input.razorpaySubscriptionId ?? null,
+    billing_period_start: input.billingPeriodStart ?? null,
+    billing_period_end: input.billingPeriodEnd ?? null
   };
 
   const { error } = await client.from("payments").insert(payload);
@@ -149,3 +159,46 @@ export const listRecentPayments = async (): Promise<PaymentRecord[]> => {
 
   return ((data ?? []) as Row[]).map(mapPaymentRow).filter((row): row is PaymentRecord => row !== null);
 };
+export const hasSuccessfulPaymentRecord = async (razorpayPaymentId: string): Promise<boolean> => {
+  const client = getSupabaseAdminClient();
+  const paymentId = razorpayPaymentId.trim();
+  if (!client || !paymentId) return false;
+
+  const { data, error } = await client
+    .from("payments")
+    .select("id")
+    .eq("razorpay_payment_id", paymentId)
+    .eq("status", "success")
+    .limit(1);
+
+  if (error) {
+    console.error("[payments] duplicate payment check skipped:", error.message);
+    return false;
+  }
+
+  return (data ?? []).length > 0;
+};
+export const hasSuccessfulBillingTransaction = async (billingTransactionId: string): Promise<boolean> => {
+  const client = getSupabaseAdminClient();
+  const transactionId = billingTransactionId.trim();
+  if (!client || !transactionId) return false;
+
+  const { data, error } = await client
+    .from("payments")
+    .select("id")
+    .or("razorpay_payment_id.eq." + transactionId + ",billing_transaction_id.eq." + transactionId)
+    .eq("status", "success")
+    .limit(1);
+
+  if (error) {
+    const fallback = await client.from("payments").select("id").eq("razorpay_payment_id", transactionId).eq("status", "success").limit(1);
+    if (!fallback.error) return (fallback.data ?? []).length > 0;
+    console.error("[payments] billing transaction check skipped:", error.message);
+    return false;
+  }
+
+  return (data ?? []).length > 0;
+};
+
+
+

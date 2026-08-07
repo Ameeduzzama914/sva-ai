@@ -1,4 +1,4 @@
-import { resolveModelLayer } from "../model-layer";
+﻿import { resolveModelLayer } from "../model-layer";
 import type { UserPlan } from "./store";
 
 export type ProviderStatus = {
@@ -24,9 +24,9 @@ export const getProviderStatus = (plan: UserPlan = "free"): ProviderStatus => {
 
   if (modelLayer === "pro") {
     const proProvidersConfigured = {
-      openai: Boolean(process.env.PRO_OPENROUTER_MODEL_A),
-      gemini: Boolean(process.env.PRO_OPENROUTER_MODEL_B),
-      deepseek: Boolean(process.env.PRO_OPENROUTER_MODEL_C)
+      openai: Boolean(process.env.SVA_GPT_PRIMARY || process.env.PRO_OPENROUTER_MODEL_A),
+      gemini: Boolean(process.env.SVA_GEMINI_PRIMARY || process.env.PRO_OPENROUTER_MODEL_B),
+      deepseek: Boolean(process.env.SVA_DEEPSEEK_PRIMARY || process.env.PRO_OPENROUTER_MODEL_C)
     };
     const openrouterConfigured = Boolean(process.env.OPENROUTER_API_KEY);
     const liveProviderCount = openrouterConfigured ? Object.values(proProvidersConfigured).filter(Boolean).length : 0;
@@ -54,3 +54,4 @@ export const getProviderStatus = (plan: UserPlan = "free"): ProviderStatus => {
     modelLayer: "free"
   };
 };
+

@@ -1,3 +1,4 @@
+﻿import { SVA_PLANS } from "../../lib/plans";
 import { ProviderLogo } from "../provider-logo";
 import { Badge } from "../ui/badge";
 import { AdminSection } from "./admin-section";
@@ -5,26 +6,26 @@ import { AdminSection } from "./admin-section";
 const plans = [
   {
     name: "Free",
-    models: ["Mistral AI", "Llama AI", "Gemma AI"],
-    limit: "Basic daily limit (15 verifications/day server quota)",
+    models: ["GPT", "Gemini", "DeepSeek"],
+    limit: `${SVA_PLANS.free.dailyVerificationLimit}/day, ${SVA_PLANS.free.monthlyVerificationLimit}/billing period`,
     variant: "neutral" as const
   },
   {
     name: "Pro",
     models: ["GPT", "Gemini", "DeepSeek"],
-    limit: "Higher daily limit (50 verifications/day)",
+    limit: `${SVA_PLANS.pro.dailyVerificationLimit}/day, ${SVA_PLANS.pro.monthlyVerificationLimit}/billing period`,
     variant: "indigo" as const
   },
   {
     name: "Ultra",
     models: ["GPT", "Gemini", "DeepSeek"],
-    limit: "Highest daily limit (150 verifications/day)",
+    limit: `${SVA_PLANS.ultra.dailyVerificationLimit}/day, ${SVA_PLANS.ultra.monthlyVerificationLimit}/billing period`,
     variant: "violet" as const
   }
 ];
 
 export const AdminPlanOverview = () => (
-  <AdminSection title="Plan overview" subtitle="Informational rules for founder reference — not editable here.">
+  <AdminSection title="Plan overview" subtitle="Informational rules for founder reference; not editable here.">
     <div className="grid gap-4 md:grid-cols-3">
       {plans.map((plan) => (
         <article
@@ -36,10 +37,10 @@ export const AdminPlanOverview = () => (
             {plan.models.map((model) => (
               <li key={model} className="flex items-center gap-2">
                 <ProviderLogo provider={model} size="sm" />
-                <span>• {model}</span>
+                <span>{model}</span>
               </li>
             ))}
-            <li className="text-xs text-slate-400">• {plan.limit}</li>
+            <li className="text-xs text-slate-400">Verified Mode allowance: {plan.limit}</li>
           </ul>
         </article>
       ))}

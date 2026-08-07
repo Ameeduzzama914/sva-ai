@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
-import { AUTH_COOKIE } from "../../../../lib/server/auth";
-import { createUser, toPublicUser, trackEvent } from "../../../../lib/server/store";
+﻿import { NextResponse } from "next/server";
+import { signUpWithEmailPassword } from "../../../../lib/server/supabase-auth";
+import { createUser, getUserByEmail, trackEvent } from "../../../../lib/server/store";
 
 type Body = { email?: string; password?: string };
+
+const genericVerificationMessage = "Check your email for the 6-digit SVA verification code.";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Body;
@@ -13,13 +15,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Provide valid email and password (min 6 chars)." }, { status: 400 });
   }
 
-  const user = await createUser(email, password);
-  if (!user) {
-    return NextResponse.json({ ok: false, message: "Email already exists." }, { status: 409 });
+  const signup = await signUpWithEmailPassword(email, password);
+  if (!signup.ok) {
+    if (signup.emailConfirmationRequired) {
+      return NextResponse.json({ ok: true, verificationRequired: true, email, message: genericVerificationMessage });
+    }
+    return NextResponse.json({ ok: false, message: "Unable to create account right now." }, { status: 503 });
   }
 
-  await trackEvent("signup", user.userId);
-  const response = NextResponse.json({ ok: true, user: toPublicUser(user) });
-  response.cookies.set(AUTH_COOKIE, user.userId, { httpOnly: true, sameSite: "lax", path: "/" });
-  return response;
+  const existing = await getUserByEmail(email);
+  const user = existing ?? (await createUser(email, password, signup.user?.id));
+  if (user) await trackEvent("signup", user.userId);
+
+  return NextResponse.json({ ok: true, verificationRequired: true, email, message: genericVerificationMessage });
 }

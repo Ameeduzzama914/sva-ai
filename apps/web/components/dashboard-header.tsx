@@ -1,16 +1,13 @@
-"use client";
+﻿"use client";
 
 import { type ChangeEvent, type FormEvent } from "react";
-import type { VerificationMode } from "../lib/models";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 
 type DashboardHeaderProps = {
   prompt: string;
-  mode: VerificationMode;
   isLoading: boolean;
   onPromptChange: (value: string) => void;
-  onModeChange: (mode: VerificationMode) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   elapsedLabel?: string;
 };
@@ -21,7 +18,7 @@ const examples = [
   "Can a VPN make online banking fully anonymous?"
 ];
 
-export const DashboardHeader = ({ prompt, mode, isLoading, onPromptChange, onModeChange, onSubmit, elapsedLabel }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ prompt, isLoading, onPromptChange, onSubmit, elapsedLabel }: DashboardHeaderProps) => {
   return (
     <Card className="shadow-lg shadow-black/20">
       <form onSubmit={onSubmit}>
@@ -42,11 +39,7 @@ export const DashboardHeader = ({ prompt, mode, isLoading, onPromptChange, onMod
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant={mode === "fast" ? "primary" : "secondary"} onClick={() => onModeChange("fast")}>Fast Mode</Button>
-            <Button type="button" variant={mode === "deep" ? "primary" : "secondary"} onClick={() => onModeChange("deep")}>Deep Verify</Button>
-            <Button type="button" variant={mode === "research" ? "primary" : "secondary"} onClick={() => onModeChange("research")}>Research Mode<span className="ml-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">NEW</span></Button>
-          </div>
+          <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100">Verified Mode</div>
 
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-xs text-emerald-300">{elapsedLabel ?? "Run verification to generate trust score"}</p>

@@ -1,6 +1,7 @@
-import { randomUUID, scryptSync, timingSafeEqual } from "crypto";
+﻿import { randomUUID, scryptSync, timingSafeEqual } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
+import { getSvaPlan } from "../plans";
 
 export type UserPlan = "free" | "pro" | "ultra";
 
@@ -124,7 +125,7 @@ const withWriteLock = async <T>(operation: () => Promise<T>): Promise<T> => {
   }
 };
 
-export const createUser = async (email: string, password: string): Promise<StoredUser | null> => {
+export const createUser = async (email: string, password: string, userIdOverride?: string): Promise<StoredUser | null> => {
   return withWriteLock(async () => {
     const normalizedEmail = email.trim().toLowerCase();
     const store = await readStore();
@@ -133,7 +134,7 @@ export const createUser = async (email: string, password: string): Promise<Store
     }
 
     const user: StoredUser = {
-      userId: randomUUID(),
+      userId: userIdOverride || randomUUID(),
       email: normalizedEmail,
       passwordHash: hashPassword(password),
       plan: "free",
@@ -143,7 +144,7 @@ export const createUser = async (email: string, password: string): Promise<Store
       history: [],
       onboardingCompleted: false
       ,
-      creditsRemaining: 15,
+      creditsRemaining: getSvaPlan("free").dailyVerificationLimit,
       creditsResetAt: nextResetAt("free"),
       monthlyUsage: 0,
       dailyUsage: 0
@@ -274,6 +275,21 @@ export const consumeDailyVerificationQuota = async (
   });
 };
 
+export const refundDailyVerificationQuota = async (userId: string): Promise<boolean> => {
+  return withWriteLock(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.userId === userId);
+    if (!user) return false;
+    const dayKey = new Date().toISOString().slice(0, 10);
+    user.usageByDate[dayKey] = Math.max(0, (user.usageByDate[dayKey] ?? 0) - 1);
+    user.usageCount = Math.max(0, user.usageCount - 1);
+    user.dailyUsage = Math.max(0, (user.dailyUsage ?? 0) - 1);
+    user.monthlyUsage = Math.max(0, (user.monthlyUsage ?? 0) - 1);
+    user.creditsRemaining = Math.min(getDailyLimit(user.plan), (user.creditsRemaining ?? 0) + 1);
+    await saveStore(store);
+    return true;
+  });
+};
 export const getDailyLimit = (plan: UserPlan): number => {
   return PLAN_CREDIT_LIMIT[plan];
 };
@@ -317,6 +333,7 @@ export type PublicUser = {
   creditsResetAt: string;
   monthlyUsage: number;
   dailyUsage: number;
+  emailVerified?: boolean;
 };
 
 export const consumeVerificationCredits = async (
@@ -371,10 +388,10 @@ export const clearUserHistory = async (userId: string): Promise<void> => {
     await saveStore(store);
   });
 };
-const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: 15, pro: 50, ultra: 150 };
-export const getMonthlyCreditLimit = (plan: UserPlan): number => (plan === "free" ? 0 : PLAN_CREDIT_LIMIT[plan]);
+const PLAN_CREDIT_LIMIT: Record<UserPlan, number> = { free: getSvaPlan("free").dailyVerificationLimit, pro: getSvaPlan("pro").dailyVerificationLimit, ultra: getSvaPlan("ultra").dailyVerificationLimit };
+export const getMonthlyCreditLimit = (plan: UserPlan): number => getSvaPlan(plan).monthlyVerificationLimit;
 export const getPlanCreditLimit = (plan: UserPlan): number => PLAN_CREDIT_LIMIT[plan];
-export const getVerificationCreditCost = (mode: "fast" | "deep" | "research"): number => (mode === "research" ? 5 : mode === "deep" ? 3 : 1);
+export const getVerificationCreditCost = (_mode: "fast" | "deep" | "research"): number => 1;
 
 const nextResetAt = (plan: UserPlan): string => {
   const now = new Date();
@@ -428,6 +445,7 @@ export type AdminUserRecord = {
   email: string;
   plan: UserPlan;
   dailyUsage: number;
+  emailVerified?: boolean;
   totalVerifications: number;
   joinedDate: string;
   status: "active" | "idle";
@@ -609,3 +627,9 @@ export const listAdminVerificationLogs = async (): Promise<AdminVerificationLog[
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     .slice(0, 100);
 };
+
+
+
+
+
+

@@ -1,5 +1,7 @@
-import { insertPaymentRecord } from "./payments";
+﻿import { getSvaPlan } from "../plans";
+import { hasSuccessfulPaymentRecord, insertPaymentRecord } from "./payments";
 import type { PaidPlan } from "./razorpay";
+import { fetchPublicUserByEmailFromSupabase } from "./supabase-admin";
 import { updateSupabasePaidPlanByEmail } from "./supabase-plan";
 import { getUserByEmail, toPublicUser, trackEvent, upgradeUserPlan, type PublicUser } from "./store";
 
@@ -21,7 +23,7 @@ const paymentSuccessMessage = (plan: PaidPlan): string =>
   `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`;
 
 const verifiedLocalPaymentUser = (user: PublicUser, plan: PaidPlan): PublicUser => {
-  const dailyLimit = plan === "pro" ? 50 : 150;
+  const dailyLimit = getSvaPlan(plan).dailyVerificationLimit;
   return {
     ...user,
     plan,
@@ -42,6 +44,18 @@ export const activatePaidPlanAfterPayment = async ({
   paymentProvider,
   paymentSource
 }: PaymentActivationInput): Promise<PaymentActivationResult> => {
+  const duplicatePayment = await hasSuccessfulPaymentRecord(razorpayPaymentId);
+  if (duplicatePayment) {
+    const supabaseUser = await fetchPublicUserByEmailFromSupabase(user.email);
+    if (supabaseUser) {
+      return { ok: true, user: supabaseUser, message: paymentSuccessMessage(plan) };
+    }
+    const localUser = await getUserByEmail(user.email);
+    if (localUser) {
+      return { ok: true, user: toPublicUser(localUser), message: paymentSuccessMessage(plan) };
+    }
+    return { ok: true, user: verifiedLocalPaymentUser(user, plan), message: paymentSuccessMessage(plan) };
+  }
   const supabaseUser = await updateSupabasePaidPlanByEmail(user.email, plan);
   if (supabaseUser) {
     await insertPaymentRecord({
@@ -98,3 +112,7 @@ export const activatePaidPlanAfterPayment = async ({
 
   return { ok: true, user: paidSessionUser, message: paymentSuccessMessage(plan) };
 };
+
+
+
+
