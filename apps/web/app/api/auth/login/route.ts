@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server";
-import { AUTH_COOKIE } from "../../../../lib/server/auth";
+import { setAuthCookie } from "../../../../lib/server/auth";
+import { ensureSupabaseUser, isSupabaseAdminConfigured } from "../../../../lib/server/supabase-admin";
 import { signInWithEmailPassword, isSupabaseAuthConfigured } from "../../../../lib/server/supabase-auth";
 import { createUser, getUserByEmail, toPublicUser, trackEvent, verifyUserCredentials } from "../../../../lib/server/store";
 
@@ -15,12 +16,14 @@ export async function POST(request: Request) {
   if (isSupabaseAuthConfigured()) {
     const supabaseLogin = await signInWithEmailPassword(email, password);
     if (supabaseLogin.ok) {
-      const existing = await getUserByEmail(email);
-      const user = existing ?? (await createUser(email, password, supabaseLogin.user.id));
+      const durableUser = isSupabaseAdminConfigured() ? await ensureSupabaseUser(supabaseLogin.user.id, email) : null;
+      const existing = durableUser ? null : await getUserByEmail(email);
+      const localUser = durableUser ? null : existing ?? (await createUser(email, password, supabaseLogin.user.id));
+      const user = durableUser ?? localUser;
       if (!user) return NextResponse.json({ ok: false, message: "Unable to open your SVA account." }, { status: 500 });
       await trackEvent("login", user.userId);
-      const response = NextResponse.json({ ok: true, user: toPublicUser(user) });
-      response.cookies.set(AUTH_COOKIE, user.userId, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+      const response = NextResponse.json({ ok: true, user: durableUser ?? toPublicUser(localUser!) });
+      setAuthCookie(response, supabaseLogin.user.id);
       return response;
     }
 
@@ -34,6 +37,6 @@ export async function POST(request: Request) {
 
   await trackEvent("login", user.userId);
   const response = NextResponse.json({ ok: true, user: toPublicUser(user) });
-  response.cookies.set(AUTH_COOKIE, user.userId, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+  setAuthCookie(response, user.userId);
   return response;
 }

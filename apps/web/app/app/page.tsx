@@ -14,18 +14,13 @@ export default function AppPage() {
 
   useEffect(() => {
     const session = getSession();
-    if (!session) {
-      router.replace("/login");
-      return;
-    }
-
     const checkServerSession = async () => {
       try {
         const response = await fetch("/api/auth/me", { credentials: "include" });
         const data = (await response.json()) as MeResponse;
         if (response.status === 403 || data.verificationRequired) {
           logout();
-          const pendingEmail = data.email ?? session.email;
+          const pendingEmail = data.email ?? session?.email ?? "";
           sessionStorage.setItem("sva_pending_verification_email", pendingEmail);
           router.replace(`/verify-email?email=${encodeURIComponent(pendingEmail)}`);
           return;

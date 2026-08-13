@@ -166,6 +166,59 @@ export const fetchPublicUserByEmailFromSupabase = async (email: string): Promise
   return data ? mapPublicUserRow(data as Row) : null;
 };
 
+export const fetchPublicUserByIdFromSupabase = async (userId: string): Promise<PublicUser | null> => {
+  const client = getSupabaseAdminClient();
+  if (!client || !userId) return null;
+  const { data, error } = await client.from("sva_users").select("*").or(`user_id.eq.${userId},id.eq.${userId}`).maybeSingle();
+  if (error) {
+    console.error("[supabase-admin] user by id:", error.message);
+    return null;
+  }
+  return data ? mapPublicUserRow(data as Row) : null;
+};
+
+export const ensureSupabaseUser = async (userId: string, email: string): Promise<PublicUser | null> => {
+  const client = getSupabaseAdminClient();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!client || !userId || !normalizedEmail) return null;
+
+  const byId = await fetchPublicUserByIdFromSupabase(userId);
+  if (byId) return byId;
+  const byEmail = await fetchPublicUserByEmailFromSupabase(normalizedEmail);
+  if (byEmail) {
+    if (byEmail.userId === userId) return byEmail;
+    const { data, error } = await client.from("sva_users").update({ user_id: userId, updated_at: new Date().toISOString() }).ilike("email", normalizedEmail).select("*").single();
+    if (error) {
+      console.error("[supabase-admin] link auth user:", error.message);
+      return null;
+    }
+    return mapPublicUserRow(data as Row);
+  }
+
+  const plan: UserPlan = normalizedEmail === "mohammed.ameeduzzama@gmail.com" ? "ultra" : "free";
+  const planConfig = getSvaPlan(plan);
+  const now = new Date().toISOString();
+  const { data, error } = await client.from("sva_users").insert({
+    user_id: userId,
+    email: normalizedEmail,
+    plan,
+    status: "active",
+    usage_count: 0,
+    daily_usage: 0,
+    monthly_usage: 0,
+    credits_remaining: planConfig.dailyVerificationLimit,
+    credits_reset_at: nextResetAt(plan),
+    onboarding_completed: false,
+    created_at: now,
+    updated_at: now
+  }).select("*").single();
+  if (error) {
+    console.error("[supabase-admin] create auth user:", error.message);
+    return null;
+  }
+  return mapPublicUserRow(data as Row);
+};
+
 export const updateSupabaseUserPlanByEmail = async (email: string, plan: UserPlan): Promise<PublicUser | null> => {
   const client = getSupabaseAdminClient();
   const normalizedEmail = email.trim().toLowerCase();

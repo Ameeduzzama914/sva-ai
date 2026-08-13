@@ -15,6 +15,8 @@ const supabaseAuth = read("lib/server/supabase-auth.ts");
 const appPage = read("app/app/page.tsx");
 const signupPage = read("app/signup/page.tsx");
 const verifyApi = read("app/api/verify/route.ts");
+const logoutRoute = read("app/api/auth/logout/route.ts");
+const supabaseAdmin = read("lib/server/supabase-admin.ts");
 
 test("signup creates Supabase Auth user and enters verification-required state", () => {
   assert.match(signupRoute, /signUpWithEmailPassword\(email, password\)/);
@@ -25,13 +27,14 @@ test("signup creates Supabase Auth user and enters verification-required state",
 test("valid OTP verification uses Supabase verifyOtp and then creates SVA session", () => {
   assert.match(supabaseAuth, /verifyOtp\(\{ email, token, type: "email" \}\)/);
   assert.match(verifyRoute, /verifySignupEmailOtp\(email, otp\)/);
-  assert.match(verifyRoute, /cookies\.set\(AUTH_COOKIE/);
+  assert.match(verifyRoute, /ensureSupabaseUser\(verified\.user\.id, email\)/);
+  assert.match(verifyRoute, /setAuthCookie\(response, verified\.user\.id\)/);
 });
 
 test("invalid or expired OTP is rejected without session cookie", () => {
   assert.match(verifyRoute, /invalid or expired/i);
   const failureBlock = verifyRoute.slice(verifyRoute.indexOf("if (!verified.ok)"), verifyRoute.indexOf("const existing"));
-  assert.doesNotMatch(failureBlock, /cookies\.set/);
+  assert.doesNotMatch(failureBlock, /setAuthCookie/);
 });
 
 test("resend flow uses Supabase signup resend and returns generic email-safe message", () => {
@@ -42,7 +45,7 @@ test("resend flow uses Supabase signup resend and returns generic email-safe mes
 test("unverified users cannot pass shared server auth", () => {
   assert.match(authHelper, /getSupabaseAuthUserById\(userId\)/);
   assert.match(authHelper, /!isSupabaseEmailVerified\(supabaseAuthUser\)/);
-  assert.match(authHelper, /return null/);
+  assert.match(authHelper, /readSessionUserId/);
 });
 
 test("unverified users cannot trigger OpenRouter-backed verification", () => {
@@ -53,7 +56,8 @@ test("unverified users cannot trigger OpenRouter-backed verification", () => {
 
 test("verified users can continue email-password login normally", () => {
   assert.match(loginRoute, /signInWithEmailPassword\(email, password\)/);
-  assert.match(loginRoute, /cookies\.set\(AUTH_COOKIE/);
+  assert.match(loginRoute, /ensureSupabaseUser\(supabaseLogin\.user\.id, email\)/);
+  assert.match(loginRoute, /setAuthCookie\(response, supabaseLogin\.user\.id\)/);
   assert.match(loginRoute, /verifyUserCredentials/);
 });
 
@@ -68,5 +72,31 @@ test("auth redirects avoid loops by keeping signup separate from verification sc
   assert.match(appPage, /\/api\/auth\/me/);
   assert.match(appPage, /router\.replace\("\/login"\)/);
   assert.doesNotMatch(read("app/verify-email/page.tsx"), /router\.replace\("\/login"\)/);
+});
+
+test("production session is durable and linked to the Supabase Auth UUID", () => {
+  assert.match(supabaseAdmin, /from\("sva_users"\)\.insert/);
+  assert.match(supabaseAdmin, /user_id: userId/);
+  assert.match(authHelper, /fetchPublicUserByIdFromSupabase\(userId\)/);
+  assert.match(authHelper, /ensureSupabaseUser\(userId, supabaseAuthUser\.email\)/);
+});
+
+test("session cookie is signed and has production-safe redirect attributes", () => {
+  assert.match(authHelper, /createHmac\("sha256"/);
+  assert.match(authHelper, /httpOnly: true/);
+  assert.match(authHelper, /sameSite: "lax"/);
+  assert.match(authHelper, /secure: process\.env\.NODE_ENV === "production"/);
+  assert.match(authHelper, /path: "\/"/);
+  assert.match(authHelper, /maxAge: AUTH_COOKIE_MAX_AGE/);
+});
+
+test("logout clears the same authenticated session cookie", () => {
+  assert.match(logoutRoute, /clearAuthCookie\(response\)/);
+  assert.match(authHelper, /maxAge: 0/);
+});
+
+test("app checks the server session even when browser-local state is absent", () => {
+  assert.match(appPage, /fetch\("\/api\/auth\/me", \{ credentials: "include" \}\)/);
+  assert.doesNotMatch(appPage, /if \(!session\) \{[\s\S]*?router\.replace\("\/login"\)/);
 });
 
