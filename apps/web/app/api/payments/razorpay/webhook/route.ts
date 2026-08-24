@@ -142,6 +142,11 @@ const handleRenewalEvent = async (eventId: string, eventType: string, payload: R
     plan,
     razorpayOrderId: invoiceId || asString(subscription?.id) || billingTransactionId,
     razorpayPaymentId: billingTransactionId,
+    billingTransactionId,
+    razorpayInvoiceId: invoiceId || undefined,
+    razorpaySubscriptionId: asString(subscription?.id) || asString(invoice?.subscription_id) || undefined,
+    billingPeriodStart: asEpochIso(invoice?.period_start) ?? asEpochIso(subscription?.current_start),
+    billingPeriodEnd: asEpochIso(invoice?.period_end) ?? asEpochIso(subscription?.current_end),
     status: "success",
     provider: "razorpay",
     source: "razorpay_subscription_renewal"

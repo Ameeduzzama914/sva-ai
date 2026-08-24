@@ -10,9 +10,11 @@ const webhook = read("app/api/payments/razorpay/webhook/route.ts");
 const verifyRoute = read("app/api/verify/route.ts");
 const shaping = read("lib/response-shaping.ts");
 const synthesis = read("lib/providers/synthesis.ts");
+const openrouter = read("lib/providers/openrouter.ts");
 const cost = read("lib/server/cost-protection.ts");
 const reservationsSql = read("../../supabase/migrations/20260804_phase_1_29_billing_usage.sql");
 const launchSql = read("../../supabase/migrations/20260805_0001_launch_blockers_renewal_costs.sql");
+const launchAuditSql = read("../../supabase/migrations/20260823_0001_launch_audit_reservation_provider_fix.sql");
 const adminMetrics = read("app/api/admin/metrics/route.ts");
 
 const extractPlanBlock = (id) => plans.match(new RegExp(`${id}: \\{([\\s\\S]*?)\\n  \\}`, "m"))?.[1] ?? "";
@@ -45,6 +47,9 @@ test("Razorpay renewal webhook verifies signature and supported renewal events",
   assert.match(webhook, /verifyWebhookSignature\(rawBody, signature, webhookSecret\)/);
   assert.match(webhook, /eventType === "invoice\.paid" \|\| eventType === "subscription\.charged"/);
   assert.match(webhook, /hasSuccessfulBillingTransaction\(billingTransactionId\)/);
+  assert.match(webhook, /billingTransactionId,/);
+  assert.match(webhook, /razorpayInvoiceId/);
+  assert.match(webhook, /razorpaySubscriptionId/);
   assert.match(webhook, /renewSupabasePaidPlan/);
   assert.match(webhook, /subscription\.halted/);
   assert.match(webhook, /subscription\.cancelled/);
@@ -63,6 +68,9 @@ test("reservation finalize and refund are idempotent and counters are protected"
   assert.match(reservationsSql, /v_res\.status = 'refunded'/);
   assert.match(reservationsSql, /greatest\(0/);
   assert.match(reservationsSql, /for update/);
+  assert.match(launchAuditSql, /already_reserved/);
+  assert.match(launchAuditSql, /v_inserted_count = 0/);
+  assert.match(launchAuditSql, /cancel_at_period_end/);
 });
 
 test("client cannot override max tokens or mode", () => {
@@ -83,6 +91,7 @@ test("adaptive shaping applies simple normal complex ceilings", () => {
 
 test("synthesis retries once on truncation and refund path exists", () => {
   assert.match(synthesis, /finishReason/);
+  assert.match(openrouter, /finishReason: data\.choices\?\.\[0\]\?\.finish_reason/);
   assert.match(synthesis, /retry: true/);
   assert.match(synthesis, /toStatus\(retry, 1\)/);
   assert.match(verifyRoute, /if \(!synthesis\.ok\)/);
@@ -95,6 +104,7 @@ test("provider cost recording and cost alerts exist", () => {
   assert.match(cost, /ultra: \{ warning: 400, critical: 520 \}/);
   assert.match(cost, /cost_usd/);
   assert.match(cost, /abnormal_usage_flagged/);
+  assert.match(launchAuditSql, /synthesis_retry/);
   assert.match(verifyRoute, /evaluateProfitProtection/);
 });
 
@@ -104,6 +114,9 @@ test("admin metrics route requires server-side admin authorization", () => {
   assert.match(adminMetrics, /admin_alerts/);
   assert.doesNotMatch(adminMetrics, /authorization/i);
 });
+
+
+
 
 
 

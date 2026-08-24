@@ -17,6 +17,7 @@ const signupPage = read("app/signup/page.tsx");
 const verifyApi = read("app/api/verify/route.ts");
 const logoutRoute = read("app/api/auth/logout/route.ts");
 const supabaseAdmin = read("lib/server/supabase-admin.ts");
+const svaUsersAuthMigration = read("../../supabase/migrations/20260813_0001_sva_users_auth_schema.sql");
 
 test("signup creates Supabase Auth user and enters verification-required state", () => {
   assert.match(signupRoute, /signUpWithEmailPassword\(email, password\)/);
@@ -79,6 +80,16 @@ test("production session is durable and linked to the Supabase Auth UUID", () =>
   assert.match(supabaseAdmin, /user_id: userId/);
   assert.match(authHelper, /fetchPublicUserByIdFromSupabase\(userId\)/);
   assert.match(authHelper, /ensureSupabaseUser\(userId, supabaseAuthUser\.email\)/);
+});
+
+test("sva_users schema supports every field used by auth linkage and session restoration", () => {
+  for (const column of [
+    "user_id", "email", "plan", "status", "usage_count", "daily_usage", "monthly_usage",
+    "credits_remaining", "credits_reset_at", "onboarding_completed", "created_at", "updated_at"
+  ]) {
+    assert.match(svaUsersAuthMigration, new RegExp(`add column if not exists ${column}\\b`));
+  }
+  assert.match(svaUsersAuthMigration, /notify pgrst, 'reload schema'/);
 });
 
 test("session cookie is signed and has production-safe redirect attributes", () => {

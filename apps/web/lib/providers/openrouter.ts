@@ -166,6 +166,7 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
       costUsd: pickNumber(data.usage?.cost) ?? pickNumber(data.usage?.total_cost),
       promptTokens: pickNumber(data.usage?.prompt_tokens),
       completionTokens: pickNumber(data.usage?.completion_tokens),
+      finishReason: data.choices?.[0]?.finish_reason,
       latencyMs: Date.now() - startedAt
     };
   } catch (error) {
@@ -174,6 +175,7 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
     return { ok: false, message: "AI model request failed.", reason: "provider_error", errorType: "provider_unavailable", providerModelId: modelId, providerError: message, latencyMs: Date.now() - startedAt };
   }
 }
+
 
 
 
