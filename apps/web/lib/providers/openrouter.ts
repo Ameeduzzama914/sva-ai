@@ -1,4 +1,4 @@
-﻿import type { ModelName } from "../models";
+import type { ModelName } from "../models";
 import { classifyOpenRouterProviderFailure } from "../server/openrouter-health";
 
 export const OPENROUTER_MODELS = [
@@ -33,6 +33,9 @@ export type OpenRouterResult =
 type OpenRouterOptions = {
   maxTokens?: number;
   signal?: AbortSignal;
+  slot?: string;
+  layer?: "free" | "pro" | "synthesis" | "unknown";
+  attempt?: "primary" | "fallback" | "router_fallback" | "synthesis" | "synthesis_retry";
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,6 +65,10 @@ const pickNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const logOpenRouterAttempt = (event: string, details: Record<string, unknown>) => {
+  console.info(`[OpenRouter] ${event}`, details);
+};
+
 const logOpenRouterFailure = (event: string, details: Record<string, unknown>) => {
   console.error(`[OpenRouter] ${event}`, details);
 };
@@ -81,8 +88,14 @@ const shouldSingleRetry = (status: number): boolean => [408, 429, 502, 503, 504]
 export async function callOpenRouter(modelId: string, prompt: string, options: OpenRouterOptions = {}): Promise<OpenRouterResult> {
   const startedAt = Date.now();
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const attemptMeta = {
+    layer: options.layer ?? "unknown",
+    slot: options.slot ?? "unknown",
+    attempt: options.attempt ?? "primary",
+    requestedModelId: modelId
+  } as const;
   if (!apiKey) {
-    logOpenRouterFailure("request skipped: missing API key", { modelId });
+    logOpenRouterFailure("request skipped: missing API key", attemptMeta);
     return { ok: false, message: "AI service is temporarily unavailable.", reason: "not_configured", errorType: "configuration_failure", providerModelId: modelId, latencyMs: Date.now() - startedAt };
   }
 
@@ -95,6 +108,7 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
     }
     const timeoutId = setTimeout(() => controller.abort(), 28000);
     try {
+      logOpenRouterAttempt("request started", { ...attemptMeta, maxTokens: options.maxTokens ?? null });
       return await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -117,7 +131,7 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
     const providerError = extractProviderError(parsed, raw);
     const errorType = classifyOpenRouterProviderFailure(response.status, providerError);
     logOpenRouterFailure("request failed", {
-      modelId,
+      ...attemptMeta,
       statusCode: response.status,
       statusText: response.statusText,
       errorType,
@@ -135,6 +149,7 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
       providerError,
       latencyMs: Date.now() - startedAt
     };
+
   };
 
   try {
@@ -154,11 +169,11 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
     };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text) {
-      logOpenRouterFailure("response parsing failed", { modelId, statusCode: response.status, responseBody: raw.slice(0, 1200) });
+      logOpenRouterFailure("response parsing failed", { ...attemptMeta, statusCode: response.status, responseBody: raw.slice(0, 1200), latencyMs: Date.now() - startedAt });;
       return { ok: false, message: "AI model request failed.", reason: "provider_error", errorType: "provider_error", statusCode: response.status, providerModelId: modelId, latencyMs: Date.now() - startedAt };
     }
 
-    return {
+    const success: Extract<OpenRouterResult, { ok: true }> = {
       ok: true,
       text,
       providerModelId: modelId,
@@ -169,9 +184,20 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
       finishReason: data.choices?.[0]?.finish_reason,
       latencyMs: Date.now() - startedAt
     };
+    logOpenRouterAttempt("request succeeded", {
+      ...attemptMeta,
+      actualModelId: success.actualModelId ?? null,
+      promptTokens: success.promptTokens ?? null,
+      completionTokens: success.completionTokens ?? null,
+      costUsd: success.costUsd ?? null,
+      finishReason: success.finishReason ?? null,
+      latencyMs: success.latencyMs
+    });
+    return success;
+
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logOpenRouterFailure("request exception", { modelId, message });
+    logOpenRouterFailure("request exception", { ...attemptMeta, message, latencyMs: Date.now() - startedAt });
     return { ok: false, message: "AI model request failed.", reason: "provider_error", errorType: "provider_unavailable", providerModelId: modelId, providerError: message, latencyMs: Date.now() - startedAt };
   }
 }

@@ -1,4 +1,4 @@
-﻿import {
+import {
   type EvidenceSnippet,
   type ModelAnswerSource,
   type ModelFallbackState,
@@ -69,7 +69,12 @@ const runSlot = async (slot: ProSlot, contextPrompt: string, responseMaxTokens?:
   let lastFailure: Extract<OpenRouterResult, { ok: false }> | undefined;
 
   for (let index = 0; index < sequence.length; index += 1) {
-    const result = await callOpenRouter(sequence[index], contextPrompt, { maxTokens: slot.maxTokens ?? responseMaxTokens });
+    const result = await callOpenRouter(sequence[index], contextPrompt, {
+      maxTokens: slot.maxTokens ?? responseMaxTokens,
+      layer: "pro",
+      slot: slot.family,
+      attempt: index > 0 ? "fallback" : "primary"
+    });
     if (result.ok) return { ...result, attemptedFallback: index > 0 };
     lastFailure = result;
     if (result.errorType === "billing_failure" || result.errorType === "configuration_failure") break;

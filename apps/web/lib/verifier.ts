@@ -1,7 +1,7 @@
-﻿import { usesProModelLayer } from "./model-layer";
+import { usesProModelLayer } from "./model-layer";
 import { getSvaPlan } from "./plans";
 import { buildProLayerResponses } from "./providers/pro-layer";
-import { callOpenRouter, OPENROUTER_MODELS } from "./providers/openrouter";
+import { callOpenRouter, OPENROUTER_MODELS, type OpenRouterResult } from "./providers/openrouter";
 import type { UserPlan } from "./server/store";
 import {
   type ClaimVerification,
@@ -898,6 +898,15 @@ const buildFocusedRetrievalQueries = (prompt: string): string[] => {
   return [prompt, ...claimQueries];
 };
 
+const isZeroCostOpenRouterModel = (modelId: string): boolean =>
+  modelId === "openrouter/free" || modelId.endsWith(":free");
+
+type FreeOpenRouterSlotResult = (OpenRouterResult & {
+  attemptedFallback: boolean;
+  attemptedRouterFallback: boolean;
+  attemptedModels: string[];
+}) | undefined;
+
 export const buildResponsesForPrompt = async (
   prompt: string,
   mode: VerificationMode = "fast",
@@ -942,28 +951,57 @@ export const buildResponsesForPrompt = async (
   }
 
   const MODELS = OPENROUTER_MODELS.map((slot) => {
-    const primaryModel = process.env[slot.envKey]?.trim();
-    const modelSequence = [primaryModel, ...slot.fallbackChain].filter((item): item is string => Boolean(item && item.length > 0));
+    const configuredModel = process.env[slot.envKey]?.trim();
+    const acceptedPrimaryModel = configuredModel && isZeroCostOpenRouterModel(configuredModel) ? configuredModel : undefined;
+    if (configuredModel && !acceptedPrimaryModel) {
+      console.warn("[OpenRouter] free model config ignored because it is not a zero-cost model", {
+        slot: slot.slot,
+        envKey: slot.envKey,
+        configuredModel
+      });
+    }
+    const modelSequence = Array.from(
+      new Set(
+        [acceptedPrimaryModel, ...slot.fallbackChain]
+          .filter((item): item is string => Boolean(item && item.length > 0))
+          .filter(isZeroCostOpenRouterModel)
+      )
+    );
     return {
       name: slot.slot,
-      primaryModel: primaryModel ?? slot.fallbackChain[0],
+      primaryModel: acceptedPrimaryModel ?? slot.fallbackChain[0],
       modelSequence
     };
   });
 
-  const outputs = await Promise.all(
+  const outputs: FreeOpenRouterSlotResult[] = await Promise.all(
     MODELS.map(async (slot) => {
-      let lastFailure: Awaited<ReturnType<typeof callOpenRouter>> | undefined;
+      let lastFailure: OpenRouterResult | undefined;
+      const attemptedModels: string[] = [];
 
       for (const modelId of slot.modelSequence) {
-        const result = await callOpenRouter(modelId, contextPrompt, { maxTokens: comparisonMaxTokens ?? planConfig.comparisonOutputTokenLimit });
+        attemptedModels.push(modelId);
+        const attempt = modelId === "openrouter/free" ? "router_fallback" : modelId === slot.primaryModel ? "primary" : "fallback";
+        const result = await callOpenRouter(modelId, contextPrompt, {
+          maxTokens: comparisonMaxTokens ?? planConfig.comparisonOutputTokenLimit,
+          layer: "free",
+          slot: slot.name,
+          attempt
+        });
         if (result.ok) {
-          return result;
+          return {
+            ...result,
+            attemptedFallback: modelId !== slot.primaryModel,
+            attemptedRouterFallback: modelId === "openrouter/free",
+            attemptedModels
+          };
         }
         lastFailure = result;
       }
 
-      return lastFailure;
+      return lastFailure
+        ? { ...lastFailure, attemptedFallback: attemptedModels.length > 1, attemptedRouterFallback: attemptedModels.includes("openrouter/free"), attemptedModels }
+        : undefined;
     })
   );
   const getOpenRouterErrorMessage = (result: Awaited<ReturnType<typeof callOpenRouter>> | undefined): string | undefined => {
@@ -1010,7 +1048,7 @@ export const buildResponsesForPrompt = async (
       errorMessage: getOpenRouterErrorMessage(outputs[0]),
       statusCode: getOpenRouterErrorStatus(outputs[0]),
       providerModelId: outputs[0]?.providerModelId,
-      status: outputs[0]?.ok === true ? "success" : "failed",
+      status: outputs[0]?.ok === true ? (outputs[0].attemptedFallback ? "fallback" : "success") : "failed",
       actualModelId: outputs[0]?.ok === true ? outputs[0].actualModelId : undefined,
       promptTokens: outputs[0]?.ok === true ? outputs[0].promptTokens : undefined,
       completionTokens: outputs[0]?.ok === true ? outputs[0].completionTokens : undefined,
@@ -1026,7 +1064,7 @@ export const buildResponsesForPrompt = async (
       errorMessage: getOpenRouterErrorMessage(outputs[1]),
       statusCode: getOpenRouterErrorStatus(outputs[1]),
       providerModelId: outputs[1]?.providerModelId,
-      status: outputs[1]?.ok === true ? "success" : "failed",
+      status: outputs[1]?.ok === true ? (outputs[1].attemptedFallback ? "fallback" : "success") : "failed",
       actualModelId: outputs[1]?.ok === true ? outputs[1].actualModelId : undefined,
       promptTokens: outputs[1]?.ok === true ? outputs[1].promptTokens : undefined,
       completionTokens: outputs[1]?.ok === true ? outputs[1].completionTokens : undefined,
@@ -1042,7 +1080,7 @@ export const buildResponsesForPrompt = async (
       errorMessage: getOpenRouterErrorMessage(outputs[2]),
       statusCode: getOpenRouterErrorStatus(outputs[2]),
       providerModelId: outputs[2]?.providerModelId,
-      status: outputs[2]?.ok === true ? "success" : "failed",
+      status: outputs[2]?.ok === true ? (outputs[2].attemptedFallback ? "fallback" : "success") : "failed",
       actualModelId: outputs[2]?.ok === true ? outputs[2].actualModelId : undefined,
       promptTokens: outputs[2]?.ok === true ? outputs[2].promptTokens : undefined,
       completionTokens: outputs[2]?.ok === true ? outputs[2].completionTokens : undefined,
