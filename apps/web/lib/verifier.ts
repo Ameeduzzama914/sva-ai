@@ -17,6 +17,7 @@ import {
 } from "./models";
 import { extractClaims } from "./claims";
 import { retrievalProvider } from "./retrieval";
+import { boundPaidEvidenceSnippets } from "./response-shaping";
 import { scoreDomainAuthority, sourceCategory, sourceTrustLabel } from "./sourceAuthority";
 
 const STOPWORDS = new Set([
@@ -220,7 +221,8 @@ const isStrongConsensus = (responses: ModelResponse[], sharedCore: Set<string>):
   responses.length >= 3 && responses.every((response) => hasCoreAgreement(response.answer, sharedCore));
 
 const buildContextPrompt = (prompt: string, evidenceSnippets: EvidenceSnippet[], concisePaidResponse = false): string => {
-  const context = evidenceSnippets
+  const promptEvidence = concisePaidResponse ? boundPaidEvidenceSnippets(evidenceSnippets) : evidenceSnippets;
+  const context = promptEvidence
     .map((snippet, index) => `${index + 1}. ${snippet.title} (relevance ${snippet.relevanceScore}/100): ${snippet.text}`)
     .join("\n");
   const instructions = concisePaidResponse

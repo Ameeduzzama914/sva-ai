@@ -1,7 +1,7 @@
 ﻿import type { EvidenceSnippet, ModelResponse, RuntimeProviderStatus, VerificationResult } from "../models";
 import type { ProviderUsageAttempt } from "../models";
 import type { PlanId } from "../plans";
-import { PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT } from "../response-shaping";
+import { boundPaidEvidenceSnippets, PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT } from "../response-shaping";
 import { callOpenRouter, type OpenRouterResult } from "./openrouter";
 
 export type SynthesisStatus = RuntimeProviderStatus & { retryCount: number; truncated: boolean };
@@ -22,7 +22,8 @@ const buildSynthesisPrompt = (input: {
   retry: boolean;
 }): string => {
   const answers = input.responses.map((response) => `${response.model}: ${response.answer}`).join("\n\n");
-  const evidence = input.evidenceSnippets.slice(0, 5).map((snippet, index) => `${index + 1}. ${snippet.title}: ${snippet.text}`).join("\n");
+  const evidenceSnippets = boundPaidEvidenceSnippets(input.evidenceSnippets).slice(0, 5);
+  const evidence = evidenceSnippets.map((snippet, index) => `${index + 1}. ${snippet.title}: ${snippet.text}`).join("\n");
   return `You are SVA Verified Mode. Produce a complete concise final answer within ${input.maxTokens} tokens.
 ${input.retry ? "The previous synthesis was truncated. Do not add preamble; write a shorter complete answer." : ""}
 

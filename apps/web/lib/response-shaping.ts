@@ -10,6 +10,15 @@ export type ResponseShape = {
 
 export const PAID_COMPARISON_OUTPUT_TOKEN_LIMIT = 100;
 export const PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT = 200;
+export const PAID_EVIDENCE_SNIPPET_LIMIT = 8;
+export const PAID_EVIDENCE_SNIPPET_CHAR_LIMIT = 800;
+
+export const boundPaidEvidenceSnippets = <T extends { title: string; text: string }>(snippets: T[]): T[] =>
+  snippets.slice(0, PAID_EVIDENCE_SNIPPET_LIMIT).map((snippet) => ({
+    ...snippet,
+    title: snippet.title.slice(0, 240),
+    text: snippet.text.slice(0, PAID_EVIDENCE_SNIPPET_CHAR_LIMIT)
+  }));
 
 const applyPaidCostCeilings = (plan: PlanId, shape: ResponseShape): ResponseShape =>
   plan === "free"

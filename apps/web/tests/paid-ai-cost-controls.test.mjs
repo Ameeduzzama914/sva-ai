@@ -50,7 +50,7 @@ test("paid synthesis has an independent defensive 200-token API ceiling", () => 
 });
 
 test("actual response shaping behavior caps paid plans and preserves Free limits", () => {
-  const { resolveResponseShape } = shapingModule;
+  const { boundPaidEvidenceSnippets, resolveResponseShape } = shapingModule;
   const resolve = (plan, prompt) => JSON.parse(JSON.stringify(resolveResponseShape(plan, prompt)));
   const normalPrompt = "Describe the main considerations people should evaluate before choosing between two established approaches for a routine project with ordinary goals and constraints.";
   const complexPrompt = "Explain the security architecture, API behavior, database tradeoffs, and operational risks in this implementation.";
@@ -62,6 +62,17 @@ test("actual response shaping behavior caps paid plans and preserves Free limits
 
   assert.deepEqual(resolve("free", normalPrompt), { complexity: "normal", comparisonMaxTokens: 160, synthesisMaxTokens: 220 });
   assert.deepEqual(resolve("free", complexPrompt), { complexity: "complex", comparisonMaxTokens: 160, synthesisMaxTokens: 220 });
+
+  const bounded = boundPaidEvidenceSnippets(Array.from({ length: 10 }, (_, index) => ({ title: `source-${index}`, text: "x".repeat(1000) })));
+  assert.equal(bounded.length, 8);
+  assert.ok(bounded.every((snippet) => snippet.text.length === 800));
+});
+
+test("oversized user prompts are rejected and paid evidence context is bounded server-side", () => {
+  assert.match(verifyRoute, /estimateTokenCount\(prompt\) > planConfig\.promptTokenLimit/);
+  assert.match(verifyRoute, /status: 413/);
+  assert.match(verifier, /concisePaidResponse \? boundPaidEvidenceSnippets\(evidenceSnippets\) : evidenceSnippets/);
+  assert.match(synthesis, /boundPaidEvidenceSnippets\(input\.evidenceSnippets\)\.slice\(0, 5\)/);
 });
 
 test("paid provider prompt requests compact verification content without filler", () => {
