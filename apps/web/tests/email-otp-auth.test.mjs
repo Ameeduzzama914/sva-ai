@@ -13,7 +13,6 @@ const resendRoute = read("app/api/auth/resend-email-otp/route.ts");
 const authHelper = read("lib/server/auth.ts");
 const supabaseAuth = read("lib/server/supabase-auth.ts");
 const appPage = read("app/app/page.tsx");
-const signupPage = read("app/signup/page.tsx");
 const verifyApi = read("app/api/verify/route.ts");
 const logoutRoute = read("app/api/auth/logout/route.ts");
 const supabaseAdmin = read("lib/server/supabase-admin.ts");
@@ -62,14 +61,12 @@ test("verified users can continue email-password login normally", () => {
   assert.match(loginRoute, /verifyUserCredentials/);
 });
 
-test("unverified login redirects to email verification instead of app", () => {
+test("email-password backend still reports verification-required state", () => {
   assert.match(loginRoute, /emailConfirmationRequired/);
   assert.match(loginRoute, /verificationRequired: true/);
-  assert.match(read("app/login/page.tsx"), /\/verify-email\?email=/);
 });
 
-test("auth redirects avoid loops by keeping signup separate from verification screen", () => {
-  assert.match(signupPage, /\/verify-email\?email=/);
+test("retained email verification screen does not create an auth redirect loop", () => {
   assert.match(appPage, /\/api\/auth\/me/);
   assert.match(appPage, /router\.replace\("\/login"\)/);
   assert.doesNotMatch(read("app/verify-email/page.tsx"), /router\.replace\("\/login"\)/);

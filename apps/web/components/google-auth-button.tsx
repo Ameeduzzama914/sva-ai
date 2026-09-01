@@ -33,7 +33,7 @@ export const GoogleAuthButton = ({ onError }: GoogleAuthButtonProps) => {
   };
 
   return (
-    <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => void continueWithGoogle()} disabled={submitting}>
+    <Button type="button" variant="primary" className="w-full gap-2" onClick={() => void continueWithGoogle()} disabled={submitting}>
       <ProviderLogo provider="google" size="sm" className="border-0 bg-white" />
       {submitting ? "Connecting to Google..." : "Continue with Google"}
     </Button>

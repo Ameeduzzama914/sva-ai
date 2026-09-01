@@ -11,13 +11,15 @@ const browserAuth = read("lib/supabase-browser.ts");
 const callbackPage = read("app/auth/callback/page.tsx");
 const sessionRoute = read("app/api/auth/oauth/session/route.ts");
 
-test("login and signup offer Google without replacing email-password forms", () => {
+test("login and signup expose Google as the only public authentication method", () => {
   for (const path of ["app/login/page.tsx", "app/signup/page.tsx"]) {
     const page = read(path);
     assert.match(page, /GoogleAuthButton/);
-    assert.match(page, /type="password"/);
+    assert.doesNotMatch(page, /<form|type="email"|type="password"|verify-email|resend-email-otp/);
+    assert.doesNotMatch(page, /or continue with|or sign up with|Forgot password/i);
   }
   assert.match(googleButton, /Continue with Google/);
+  assert.match(googleButton, /variant="primary"/);
 });
 
 test("Google OAuth uses Supabase PKCE and the canonical callback URL", () => {
