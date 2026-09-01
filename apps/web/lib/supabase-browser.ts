@@ -16,7 +16,7 @@ export const getSupabaseBrowserClient = (): SupabaseClient | null => {
       flowType: "pkce",
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: false
     }
   });
   return browserClient;

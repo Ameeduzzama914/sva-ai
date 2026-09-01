@@ -28,6 +28,12 @@ test("Google OAuth uses Supabase PKCE and the canonical callback URL", () => {
   assert.match(browserAuth, /\/auth\/callback/);
 });
 
+test("manual PKCE callback exchange cannot race Supabase automatic URL detection", () => {
+  assert.match(browserAuth, /detectSessionInUrl: false/);
+  assert.doesNotMatch(browserAuth, /detectSessionInUrl: true/);
+  assert.match(callbackPage, /code \? await supabase\.auth\.exchangeCodeForSession\(code\)/);
+});
+
 test("OAuth callback validates the Supabase token server-side before creating an SVA session", () => {
   assert.match(callbackPage, /exchangeCodeForSession\(code\)/);
   assert.match(callbackPage, /\/api\/auth\/oauth\/session/);
