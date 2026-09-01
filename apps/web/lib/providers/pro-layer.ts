@@ -5,10 +5,12 @@ import {
   type ModelName,
   type ModelResponse,
   type PerModelSource,
+  type ProviderUsageAttempt,
   type RuntimeProviderStatus,
   type VerificationExecutionMeta,
   type VerificationMode
 } from "../models";
+import { PAID_COMPARISON_OUTPUT_TOKEN_LIMIT } from "../response-shaping";
 import { callOpenRouter, type OpenRouterResult } from "./openrouter";
 
 type ProSlot = {
@@ -64,31 +66,59 @@ const modelSequenceForSlot = (slot: ProSlot): string[] => {
   return Array.from(new Set([primary, fallback].filter(Boolean)));
 };
 
-const runSlot = async (slot: ProSlot, contextPrompt: string, responseMaxTokens?: number): Promise<OpenRouterResult & { attemptedFallback: boolean }> => {
+type PaidSlotResult = {
+  result: OpenRouterResult;
+  attemptedFallback: boolean;
+  attempts: ProviderUsageAttempt[];
+};
+
+const toUsageAttempt = (slot: ProSlot, modelId: string, index: number, result: OpenRouterResult): ProviderUsageAttempt => ({
+  modelFamily: slot.family,
+  requestedModel: modelId,
+  actualModel: result.ok ? result.actualModelId : undefined,
+  attemptType: index > 0 ? "fallback" : "primary",
+  promptTokens: result.ok ? result.promptTokens : undefined,
+  completionTokens: result.ok ? result.completionTokens : undefined,
+  reasoningTokens: result.ok ? result.reasoningTokens : undefined,
+  cachedTokens: result.ok ? result.cachedTokens : undefined,
+  costUsd: result.ok ? result.costUsd : undefined,
+  latencyMs: result.latencyMs,
+  statusCode: result.ok ? undefined : result.statusCode,
+  errorType: result.ok ? undefined : result.errorType,
+  success: result.ok
+});
+
+const runSlot = async (slot: ProSlot, contextPrompt: string, responseMaxTokens?: number): Promise<PaidSlotResult> => {
   const sequence = modelSequenceForSlot(slot).slice(0, 2);
   let lastFailure: Extract<OpenRouterResult, { ok: false }> | undefined;
+  const attempts: ProviderUsageAttempt[] = [];
+  const maxTokens = Math.min(slot.maxTokens ?? responseMaxTokens ?? PAID_COMPARISON_OUTPUT_TOKEN_LIMIT, PAID_COMPARISON_OUTPUT_TOKEN_LIMIT);
 
   for (let index = 0; index < sequence.length; index += 1) {
     const result = await callOpenRouter(sequence[index], contextPrompt, {
-      maxTokens: slot.maxTokens ?? responseMaxTokens,
+      maxTokens,
       layer: "pro",
       slot: slot.family,
       attempt: index > 0 ? "fallback" : "primary"
     });
-    if (result.ok) return { ...result, attemptedFallback: index > 0 };
+    attempts.push(toUsageAttempt(slot, sequence[index], index, result));
+    if (result.ok) return { result, attemptedFallback: index > 0, attempts };
     lastFailure = result;
     if (result.errorType === "billing_failure" || result.errorType === "configuration_failure") break;
   }
 
   return {
-    ok: false,
-    message: lastFailure?.message ?? "AI model request failed.",
-    reason: lastFailure?.reason ?? "provider_error",
-    errorType: lastFailure?.errorType ?? "provider_error",
-    statusCode: lastFailure?.statusCode,
-    providerModelId: lastFailure?.providerModelId ?? sequence[0] ?? slot.defaultPrimaryModelId,
-    providerError: lastFailure?.providerError,
-    attemptedFallback: sequence.length > 1
+    result: {
+      ok: false,
+      message: lastFailure?.message ?? "AI model request failed.",
+      reason: lastFailure?.reason ?? "provider_error",
+      errorType: lastFailure?.errorType ?? "provider_error",
+      statusCode: lastFailure?.statusCode,
+      providerModelId: lastFailure?.providerModelId ?? sequence[0] ?? slot.defaultPrimaryModelId,
+      providerError: lastFailure?.providerError
+    },
+    attemptedFallback: sequence.length > 1,
+    attempts
   };
 };
 
@@ -112,20 +142,25 @@ export const buildProLayerResponses = async ({
   evidenceSnippets: EvidenceSnippet[];
   meta: VerificationExecutionMeta;
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
+  providerUsageAttempts: ProviderUsageAttempt[];
 }> => {
   const settled = await Promise.allSettled(PRO_SLOTS.map((slot) => runSlot(slot, contextPrompt, responseMaxTokens)));
-  const outputs = settled.map((result, index): OpenRouterResult & { attemptedFallback: boolean } => {
+  const slotResults = settled.map((result, index): PaidSlotResult => {
     if (result.status === "fulfilled") return result.value;
     return {
-      ok: false,
-      message: "AI model request failed.",
-      reason: "provider_error",
-      errorType: "provider_unavailable",
-      providerModelId: modelSequenceForSlot(PRO_SLOTS[index])[0] ?? PRO_SLOTS[index].defaultPrimaryModelId,
-      providerError: result.reason instanceof Error ? result.reason.message : String(result.reason),
-      attemptedFallback: false
+      result: {
+        ok: false,
+        message: "AI model request failed.",
+        reason: "provider_error",
+        errorType: "provider_unavailable",
+        providerModelId: modelSequenceForSlot(PRO_SLOTS[index])[0] ?? PRO_SLOTS[index].defaultPrimaryModelId,
+        providerError: result.reason instanceof Error ? result.reason.message : String(result.reason)
+      },
+      attemptedFallback: false,
+      attempts: []
     };
   });
+  const outputs = slotResults.map((slotResult) => slotResult.result);
 
   const responses: ModelResponse[] = PRO_SLOTS.map((slot, index) => {
     const result = outputs[index];
@@ -149,6 +184,11 @@ export const buildProLayerResponses = async ({
   const providerRuntimeStatus = PRO_SLOTS.reduce(
     (status, slot, index) => {
       const result = outputs[index];
+      const attempts = slotResults[index].attempts;
+      const sumAttemptMetric = (pick: (attempt: ProviderUsageAttempt) => number | undefined): number | undefined => {
+        const values = attempts.map(pick).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+        return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : undefined;
+      };
       status[slot.slot] = {
         configured: Boolean(process.env.OPENROUTER_API_KEY),
         liveSuccess: result.ok,
@@ -159,11 +199,13 @@ export const buildProLayerResponses = async ({
         providerErrorType: result.ok ? undefined : result.errorType,
         providerModelId: result.providerModelId ?? modelSequenceForSlot(slot)[0] ?? slot.defaultPrimaryModelId,
         actualModelId: result.ok ? result.actualModelId : undefined,
-        promptTokens: result.ok ? result.promptTokens : undefined,
-        completionTokens: result.ok ? result.completionTokens : undefined,
-        costUsd: result.ok ? result.costUsd : undefined,
-        status: result.ok ? (result.attemptedFallback ? "fallback" : "success") : result.statusCode === 408 || result.statusCode === 504 ? "timeout" : "failed",
-        latencyMs: result.latencyMs,
+        promptTokens: sumAttemptMetric((attempt) => attempt.promptTokens),
+        completionTokens: sumAttemptMetric((attempt) => attempt.completionTokens),
+        reasoningTokens: sumAttemptMetric((attempt) => attempt.reasoningTokens),
+        cachedTokens: sumAttemptMetric((attempt) => attempt.cachedTokens),
+        costUsd: sumAttemptMetric((attempt) => attempt.costUsd),
+        status: result.ok ? (slotResults[index].attemptedFallback ? "fallback" : "success") : result.statusCode === 408 || result.statusCode === 504 ? "timeout" : "failed",
+        latencyMs: sumAttemptMetric((attempt) => attempt.latencyMs),
         rawResponse: result.ok ? result.text.slice(0, 1200) : undefined
       };
       return status;
@@ -178,6 +220,7 @@ export const buildProLayerResponses = async ({
     modelSources,
     evidenceSnippets,
     providerRuntimeStatus,
+    providerUsageAttempts: slotResults.flatMap((slotResult) => slotResult.attempts),
     meta: {
       mode: "pro",
       modeUsed: mode,

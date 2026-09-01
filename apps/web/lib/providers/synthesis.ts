@@ -1,11 +1,14 @@
 ﻿import type { EvidenceSnippet, ModelResponse, RuntimeProviderStatus, VerificationResult } from "../models";
+import type { ProviderUsageAttempt } from "../models";
+import type { PlanId } from "../plans";
+import { PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT } from "../response-shaping";
 import { callOpenRouter, type OpenRouterResult } from "./openrouter";
 
 export type SynthesisStatus = RuntimeProviderStatus & { retryCount: number; truncated: boolean };
 
 export type SynthesisOutcome =
-  | { ok: true; answer: string; status: SynthesisStatus }
-  | { ok: false; message: string; status: SynthesisStatus };
+  | { ok: true; answer: string; status: SynthesisStatus; attempts: ProviderUsageAttempt[] }
+  | { ok: false; message: string; status: SynthesisStatus; attempts: ProviderUsageAttempt[] };
 
 const synthesisPrimaryModel = (): string => process.env.SVA_SYNTHESIS_PRIMARY?.trim() || "openai/gpt-4.1-mini";
 const synthesisFallbackModel = (): string => process.env.SVA_SYNTHESIS_FALLBACK?.trim() || "openai/gpt-4.1-nano";
@@ -49,10 +52,28 @@ const toStatus = (result: OpenRouterResult, retryCount: number): SynthesisStatus
   latencyMs: result.latencyMs,
   promptTokens: result.ok ? result.promptTokens : undefined,
   completionTokens: result.ok ? result.completionTokens : undefined,
+  reasoningTokens: result.ok ? result.reasoningTokens : undefined,
+  cachedTokens: result.ok ? result.cachedTokens : undefined,
   costUsd: result.ok ? result.costUsd : undefined,
   rawResponse: result.ok ? result.text.slice(0, 1200) : undefined,
   retryCount,
   truncated: isTruncated(result)
+});
+
+const toUsageAttempt = (result: OpenRouterResult, attemptType: "synthesis" | "synthesis_retry"): ProviderUsageAttempt => ({
+  modelFamily: "synthesis",
+  requestedModel: result.providerModelId ?? "unknown",
+  actualModel: result.ok ? result.actualModelId : undefined,
+  attemptType,
+  promptTokens: result.ok ? result.promptTokens : undefined,
+  completionTokens: result.ok ? result.completionTokens : undefined,
+  reasoningTokens: result.ok ? result.reasoningTokens : undefined,
+  cachedTokens: result.ok ? result.cachedTokens : undefined,
+  costUsd: result.ok ? result.costUsd : undefined,
+  latencyMs: result.latencyMs,
+  statusCode: result.ok ? undefined : result.statusCode,
+  errorType: result.ok ? undefined : result.errorType,
+  success: result.ok
 });
 
 export const synthesizeVerificationAnswer = async (input: {
@@ -60,20 +81,42 @@ export const synthesizeVerificationAnswer = async (input: {
   responses: ModelResponse[];
   evidenceSnippets: EvidenceSnippet[];
   verification: VerificationResult;
+  plan: PlanId;
   maxTokens: number;
 }): Promise<SynthesisOutcome> => {
-  const primary = await callOpenRouter(synthesisPrimaryModel(), buildSynthesisPrompt({ ...input, retry: false }), { maxTokens: input.maxTokens });
-  if (primary.ok && !isTruncated(primary)) return { ok: true, answer: primary.text.trim(), status: toStatus(primary, 0) };
-  if (!primary.ok && primary.errorType === "billing_failure") return { ok: false, message: primary.message, status: toStatus(primary, 0) };
+  const maxTokens = input.plan === "free" ? input.maxTokens : Math.min(input.maxTokens, PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT);
+  const primary = await callOpenRouter(synthesisPrimaryModel(), buildSynthesisPrompt({ ...input, maxTokens, retry: false }), {
+    maxTokens,
+    layer: "synthesis",
+    slot: "synthesis",
+    attempt: "synthesis"
+  });
+  const primaryAttempts = [toUsageAttempt(primary, "synthesis")];
+  if (primary.ok && !isTruncated(primary)) return { ok: true, answer: primary.text.trim(), status: toStatus(primary, 0), attempts: primaryAttempts };
+  if (!primary.ok && primary.errorType === "billing_failure") return { ok: false, message: primary.message, status: toStatus(primary, 0), attempts: primaryAttempts };
 
-  const retry = await callOpenRouter(synthesisFallbackModel(), buildSynthesisPrompt({ ...input, retry: true }), { maxTokens: input.maxTokens });
+  const retry = await callOpenRouter(synthesisFallbackModel(), buildSynthesisPrompt({ ...input, maxTokens, retry: true }), {
+    maxTokens,
+    layer: "synthesis",
+    slot: "synthesis",
+    attempt: "synthesis_retry"
+  });
+  const attempts = [...primaryAttempts, toUsageAttempt(retry, "synthesis_retry")];
   const retryStatus = toStatus(retry, 1);
   retryStatus.truncated = isTruncated(primary) || isTruncated(retry);
-  retryStatus.costUsd = (primary.ok ? primary.costUsd ?? 0 : 0) + (retry.ok ? retry.costUsd ?? 0 : 0) || retryStatus.costUsd;
-  retryStatus.latencyMs = (primary.latencyMs ?? 0) + (retry.latencyMs ?? 0) || retryStatus.latencyMs;
+  const sumAttemptMetric = (pick: (attempt: ProviderUsageAttempt) => number | undefined): number | undefined => {
+    const values = attempts.map(pick).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : undefined;
+  };
+  retryStatus.promptTokens = sumAttemptMetric((attempt) => attempt.promptTokens);
+  retryStatus.completionTokens = sumAttemptMetric((attempt) => attempt.completionTokens);
+  retryStatus.reasoningTokens = sumAttemptMetric((attempt) => attempt.reasoningTokens);
+  retryStatus.cachedTokens = sumAttemptMetric((attempt) => attempt.cachedTokens);
+  retryStatus.costUsd = sumAttemptMetric((attempt) => attempt.costUsd);
+  retryStatus.latencyMs = sumAttemptMetric((attempt) => attempt.latencyMs);
 
-  if (retry.ok && !isTruncated(retry)) return { ok: true, answer: retry.text.trim(), status: retryStatus };
-  return { ok: false, message: "Synthesis failed.", status: retryStatus };
+  if (retry.ok && !isTruncated(retry)) return { ok: true, answer: retry.text.trim(), status: retryStatus, attempts };
+  return { ok: false, message: "Synthesis failed.", status: retryStatus, attempts };
 };
 
 export const applySynthesisAnswer = (verification: VerificationResult, answer: string): VerificationResult => ({

@@ -114,7 +114,8 @@ export async function POST(request: Request) {
       verificationId,
       userId: user.userId,
       plan: usage.plan,
-      providerRuntimeStatus: providerFlow.providerRuntimeStatus
+      providerRuntimeStatus: providerFlow.providerRuntimeStatus,
+      providerUsageAttempts: providerFlow.providerUsageAttempts
     });
 
     if (hasOpenRouterBillingFailure(providerFlow)) {
@@ -149,11 +150,12 @@ export async function POST(request: Request) {
         responses: validResponses,
         evidenceSnippets: safeEvidenceSnippets,
         verification,
+        plan: usage.plan,
         maxTokens: responseShape.synthesisMaxTokens
       }),
       35000
     );
-    await insertSynthesisProviderUsageRow({ verificationId, userId: user.userId, plan: usage.plan, status: synthesis.status });
+    await insertSynthesisProviderUsageRow({ verificationId, userId: user.userId, plan: usage.plan, status: synthesis.status, attempts: synthesis.attempts });
     if (!synthesis.ok) {
       await refundReservation();
       return NextResponse.json(

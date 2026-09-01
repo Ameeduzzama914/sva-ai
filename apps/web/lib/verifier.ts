@@ -9,6 +9,7 @@ import {
   type ModelName,
   type ModelResponse,
   type PerModelSource,
+  type ProviderUsageAttempt,
   type VerificationMode,
   type VerificationExecutionMeta,
   type VerificationResult,
@@ -218,16 +219,23 @@ const hasCoreAgreement = (answer: string, sharedCore: Set<string>): boolean => {
 const isStrongConsensus = (responses: ModelResponse[], sharedCore: Set<string>): boolean =>
   responses.length >= 3 && responses.every((response) => hasCoreAgreement(response.answer, sharedCore));
 
-const buildContextPrompt = (prompt: string, evidenceSnippets: EvidenceSnippet[]): string => {
+const buildContextPrompt = (prompt: string, evidenceSnippets: EvidenceSnippet[], concisePaidResponse = false): string => {
   const context = evidenceSnippets
     .map((snippet, index) => `${index + 1}. ${snippet.title} (relevance ${snippet.relevanceScore}/100): ${snippet.text}`)
     .join("\n");
-
-  return `You are a verification assistant. Answer the user's question directly in 2-4 concise sentences.
+  const instructions = concisePaidResponse
+    ? `You are an independent SVA verification model. Return only a compact factual assessment.
+- Give the direct judgment and essential supporting reason or evidence.
+- State material uncertainty, contradiction, or caveat when relevant.
+- Use 1-2 concise sentences when sufficient; prioritize key facts for complex questions.
+- No greeting, introduction, filler, or unsupported speculation.`
+    : `You are a verification assistant. Answer the user's question directly in 2-4 concise sentences.
 - Prioritize factual statements grounded in the provided evidence.
 - Avoid unsupported claims or speculation.
 - If evidence is weak, incomplete, or conflicting, explicitly state uncertainty.
-- Keep output brief and practical.
+- Keep output brief and practical.`;
+
+  return `${instructions}
 
 Evidence:
 ${context || "No external evidence snippets were available."}
@@ -918,6 +926,7 @@ export const buildResponsesForPrompt = async (
   evidenceSnippets: EvidenceSnippet[];
   meta: VerificationExecutionMeta;
   providerRuntimeStatus: Record<ModelName, RuntimeProviderStatus>;
+  providerUsageAttempts?: ProviderUsageAttempt[];
 }> => {
   const queries = buildFocusedRetrievalQueries(prompt);
   const retrievalResults = await Promise.all(queries.map((query) => retrievalProvider.retrieve(query, retrievalLimitByMode(mode))));
@@ -931,9 +940,10 @@ export const buildResponsesForPrompt = async (
     return { ...snippet, sourceQualityScore: normalizedQuality, credibilityScore: snippet.credibilityScore ?? normalizedQuality };
   });
   const planConfig = getSvaPlan(plan);
-  const contextPrompt = buildContextPrompt(prompt, evidenceSnippets);
+  const proModelLayer = usesProModelLayer(plan);
+  const contextPrompt = buildContextPrompt(prompt, evidenceSnippets, proModelLayer);
 
-  if (usesProModelLayer(plan)) {
+  if (proModelLayer) {
     const proFlow = await buildProLayerResponses({
       contextPrompt,
       evidenceSnippets,

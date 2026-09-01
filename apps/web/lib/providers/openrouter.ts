@@ -27,7 +27,7 @@ export type OpenRouterProviderErrorType =
   | "provider_error";
 
 export type OpenRouterResult =
-  | { ok: true; text: string; providerModelId: string; actualModelId?: string; costUsd?: number; promptTokens?: number; completionTokens?: number; finishReason?: string; latencyMs?: number }
+  | { ok: true; text: string; providerModelId: string; actualModelId?: string; costUsd?: number; promptTokens?: number; completionTokens?: number; totalTokens?: number; reasoningTokens?: number; cachedTokens?: number; finishReason?: string; latencyMs?: number }
   | { ok: false; message: string; reason: "not_configured" | "provider_error"; errorType: OpenRouterProviderErrorType; statusCode?: number; providerModelId?: string; providerError?: string; latencyMs?: number };
 
 type OpenRouterOptions = {
@@ -165,7 +165,15 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
     const data = parsed as {
       model?: string;
       choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
-      usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; cost?: unknown; total_cost?: unknown };
+      usage?: {
+        prompt_tokens?: unknown;
+        completion_tokens?: unknown;
+        total_tokens?: unknown;
+        cost?: unknown;
+        total_cost?: unknown;
+        completion_tokens_details?: { reasoning_tokens?: unknown };
+        prompt_tokens_details?: { cached_tokens?: unknown };
+      };
     };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text) {
@@ -181,6 +189,9 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
       costUsd: pickNumber(data.usage?.cost) ?? pickNumber(data.usage?.total_cost),
       promptTokens: pickNumber(data.usage?.prompt_tokens),
       completionTokens: pickNumber(data.usage?.completion_tokens),
+      totalTokens: pickNumber(data.usage?.total_tokens),
+      reasoningTokens: pickNumber(data.usage?.completion_tokens_details?.reasoning_tokens),
+      cachedTokens: pickNumber(data.usage?.prompt_tokens_details?.cached_tokens),
       finishReason: data.choices?.[0]?.finish_reason,
       latencyMs: Date.now() - startedAt
     };
@@ -189,6 +200,9 @@ export async function callOpenRouter(modelId: string, prompt: string, options: O
       actualModelId: success.actualModelId ?? null,
       promptTokens: success.promptTokens ?? null,
       completionTokens: success.completionTokens ?? null,
+      totalTokens: success.totalTokens ?? null,
+      reasoningTokens: success.reasoningTokens ?? null,
+      cachedTokens: success.cachedTokens ?? null,
       costUsd: success.costUsd ?? null,
       finishReason: success.finishReason ?? null,
       latencyMs: success.latencyMs

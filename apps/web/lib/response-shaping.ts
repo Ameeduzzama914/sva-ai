@@ -8,6 +8,18 @@ export type ResponseShape = {
   synthesisMaxTokens: number;
 };
 
+export const PAID_COMPARISON_OUTPUT_TOKEN_LIMIT = 100;
+export const PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT = 200;
+
+const applyPaidCostCeilings = (plan: PlanId, shape: ResponseShape): ResponseShape =>
+  plan === "free"
+    ? shape
+    : {
+        ...shape,
+        comparisonMaxTokens: Math.min(shape.comparisonMaxTokens, PAID_COMPARISON_OUTPUT_TOKEN_LIMIT),
+        synthesisMaxTokens: Math.min(shape.synthesisMaxTokens, PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT)
+      };
+
 const HIGH_STAKES_OR_CURRENT = /\b(today|latest|current|breaking|news|medical|diagnosis|treatment|symptom|dose|legal|law|tax|financial|investment|stock|crypto|safety|risk|urgent)\b/i;
 const TECHNICAL = /\b(code|typescript|javascript|python|api|database|sql|architecture|debug|error|stack trace|algorithm|security|compliance|integration|webhook)\b/i;
 const MULTIPART = /(\?|\b(and|also|compare|contrast|explain why|step by step|pros and cons|tradeoffs?)\b)/gi;
@@ -36,24 +48,24 @@ export const resolveResponseShape = (plan: PlanId, prompt: string): ResponseShap
   const complexity = classifyVerificationComplexity(prompt);
 
   if (complexity === "simple") {
-    return {
+    return applyPaidCostCeilings(plan, {
       complexity,
       comparisonMaxTokens: Math.min(100, planConfig.comparisonOutputTokenLimit),
       synthesisMaxTokens: Math.min(140, planConfig.synthesisOutputTokenLimit)
-    };
+    });
   }
 
   if (complexity === "normal") {
-    return {
+    return applyPaidCostCeilings(plan, {
       complexity,
       comparisonMaxTokens: Math.min(220, planConfig.comparisonOutputTokenLimit),
       synthesisMaxTokens: Math.min(350, planConfig.synthesisOutputTokenLimit)
-    };
+    });
   }
 
-  return {
+  return applyPaidCostCeilings(plan, {
     complexity,
     comparisonMaxTokens: planConfig.comparisonOutputTokenLimit,
     synthesisMaxTokens: planConfig.synthesisOutputTokenLimit
-  };
+  });
 };
