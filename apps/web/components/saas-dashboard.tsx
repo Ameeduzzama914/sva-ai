@@ -1027,6 +1027,16 @@ ${evidenceReport}
                   </ShellPanel>
                 ) : null}
                 <VerificationPipeline stages={stages} />
+                <ModelAgreementSection
+                  responses={responses}
+                  sourceMap={sourceMap}
+                  runtimeProviderStatus={runtimeProviderStatus}
+                  providerStatus={providerStatus}
+                  modelLayer={modelLayer}
+                  verification={verification}
+                  hasRunVerification={hasRunVerification}
+                  isLoading={isLoading}
+                />
                 <VerifiedAnswerCard
                   verification={verification}
                   trustScore={trustScore}
@@ -1056,17 +1066,6 @@ ${evidenceReport}
                 </ShellPanel>
               </div>
             </div>
-
-            <ModelAgreementSection
-              responses={responses}
-              sourceMap={sourceMap}
-              runtimeProviderStatus={runtimeProviderStatus}
-              providerStatus={providerStatus}
-              modelLayer={modelLayer}
-              verification={verification}
-              hasRunVerification={hasRunVerification}
-              isLoading={isLoading}
-            />
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
               <EvidencePanel evidenceSnippets={evidenceSnippets} meta={meta} isLoading={isLoading} />
