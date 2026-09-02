@@ -22,7 +22,7 @@ const executeTypeScriptModule = (source, requireModule = () => { throw new Error
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText;
   const module = { exports: {} };
-  const factory = vm.runInNewContext(`(function (require, module, exports) { ${compiled}\n})`);
+  const factory = vm.runInNewContext(`(function (require, module, exports) { ${compiled}\n})`, { process });
   factory(requireModule, module, module.exports);
   return module.exports;
 };
@@ -79,8 +79,56 @@ test("paid provider prompt requests compact verification content without filler"
   assert.match(verifier, /independent SVA verification model/);
   assert.match(verifier, /direct judgment and essential supporting reason or evidence/);
   assert.match(verifier, /material uncertainty, contradiction, or caveat/);
-  assert.match(verifier, /1-2 concise sentences when sufficient/);
+  assert.match(verifier, /at most 2 short prose sentences and aim for no more than 60 words/);
+  assert.match(verifier, /Do not use bullets, numbered lists, headings/);
   assert.match(verifier, /No greeting, introduction, filler/);
+});
+
+test("all paid primary and fallback attempts receive the same 100-token ceiling", async () => {
+  const calls = [];
+  const fallbackModels = new Set(["test/gpt-fallback", "test/gemini-fallback", "test/deepseek-fallback"]);
+  const mockedOpenRouter = async (modelId, _prompt, options) => {
+    calls.push({ modelId, ...options });
+    if (!fallbackModels.has(modelId)) return { ok: false, message: "retry", reason: "provider_error", errorType: "provider_unavailable", providerModelId: modelId };
+    return { ok: true, text: "Concise factual result.", providerModelId: modelId, actualModelId: modelId };
+  };
+  const previous = Object.fromEntries(["SVA_GPT_PRIMARY", "SVA_GPT_FALLBACK", "SVA_GEMINI_PRIMARY", "SVA_GEMINI_FALLBACK", "SVA_DEEPSEEK_PRIMARY", "SVA_DEEPSEEK_FALLBACK"].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    SVA_GPT_PRIMARY: "test/gpt-primary", SVA_GPT_FALLBACK: "test/gpt-fallback",
+    SVA_GEMINI_PRIMARY: "test/gemini-primary", SVA_GEMINI_FALLBACK: "test/gemini-fallback",
+    SVA_DEEPSEEK_PRIMARY: "test/deepseek-primary", SVA_DEEPSEEK_FALLBACK: "test/deepseek-fallback"
+  });
+  try {
+    const module = executeTypeScriptModule(proLayer, (specifier) => {
+      if (specifier === "../response-shaping") return { PAID_COMPARISON_OUTPUT_TOKEN_LIMIT: 100 };
+      if (specifier === "./openrouter") return { callOpenRouter: mockedOpenRouter };
+      throw new Error(`Unexpected module import: ${specifier}`);
+    });
+    await module.buildProLayerResponses({ contextPrompt: "Verify this.", evidenceSnippets: [], retrievalModeUsed: "none", mode: "fast", responseMaxTokens: 400 });
+    assert.equal(calls.length, 6);
+    assert.ok(calls.every((call) => call.maxTokens === 100));
+    assert.equal(calls.filter((call) => call.attempt === "primary").length, 3);
+    assert.equal(calls.filter((call) => call.attempt === "fallback").length, 3);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) value === undefined ? delete process.env[key] : process.env[key] = value;
+  }
+});
+
+test("paid synthesis primary and retry retain the independent 200-token ceiling", async () => {
+  const calls = [];
+  const module = executeTypeScriptModule(synthesis, (specifier) => {
+    if (specifier === "../response-shaping") return { PAID_SYNTHESIS_OUTPUT_TOKEN_LIMIT: 200, boundPaidEvidenceSnippets: (items) => items };
+    if (specifier === "./openrouter") return { callOpenRouter: async (modelId, _prompt, options) => {
+      calls.push({ modelId, ...options });
+      return calls.length === 1
+        ? { ok: true, text: "Truncated", providerModelId: modelId, finishReason: "length" }
+        : { ok: true, text: "Complete", providerModelId: modelId, finishReason: "stop" };
+    } };
+    throw new Error(`Unexpected module import: ${specifier}`);
+  });
+  const result = await module.synthesizeVerificationAnswer({ prompt: "Question", responses: [], evidenceSnippets: [], verification: {}, plan: "ultra", maxTokens: 550 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls.map((call) => [call.attempt, call.maxTokens]), [["synthesis", 200], ["synthesis_retry", 200]]);
 });
 
 test("Pro and Ultra remain isolated to bounded paid family model sequences", () => {

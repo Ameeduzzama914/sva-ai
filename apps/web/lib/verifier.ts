@@ -229,7 +229,8 @@ const buildContextPrompt = (prompt: string, evidenceSnippets: EvidenceSnippet[],
     ? `You are an independent SVA verification model. Return only a compact factual assessment.
 - Give the direct judgment and essential supporting reason or evidence.
 - State material uncertainty, contradiction, or caveat when relevant.
-- Use 1-2 concise sentences when sufficient; prioritize key facts for complex questions.
+- Use at most 2 short prose sentences and aim for no more than 60 words.
+- Do not use bullets, numbered lists, headings, or restate the question or source metadata.
 - No greeting, introduction, filler, or unsupported speculation.`
     : `You are a verification assistant. Answer the user's question directly in 2-4 concise sentences.
 - Prioritize factual statements grounded in the provided evidence.

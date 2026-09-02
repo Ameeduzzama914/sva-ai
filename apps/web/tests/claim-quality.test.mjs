@@ -63,6 +63,30 @@ test("preserves health modals, qualifiers, and negation", () => {
   ]);
 });
 
+test("strips only structurally marked verification commentary", () => {
+  assert.deepEqual(Array.from(extractAnswerClaims(`Solar power can reduce electricity costs for a small business: Verified.
+It depends on sunlight: Supported.
+May require batteries for reliability: Partially verified.
+Solar power has a higher upfront cost than grid electricity alone: Mixed evidence.`)), [
+    "Solar power can reduce electricity costs for a small business.",
+    "Solar power depends on sunlight.",
+    "Solar power may require batteries for reliability.",
+    "Solar power has a higher upfront cost than grid electricity alone."
+  ]);
+  assert.deepEqual(Array.from(extractAnswerClaims("The identity remains unverified.")), ["The identity remains unverified."]);
+});
+
+test("excludes standalone status labels and safely handles summary markers", () => {
+  assert.deepEqual(Array.from(extractAnswerClaims("Verified. Partially verified. Unsupported. Disputed. Inconclusive.")), []);
+  assert.deepEqual(Array.from(extractAnswerClaims("In summary: The treatment may reduce symptoms.")), ["The treatment may reduce symptoms."]);
+});
+
+test("does not manufacture claims from uncertain subordinate gerund fragments", () => {
+  const claims = Array.from(extractAnswerClaims("Solar energy relies on sunlight, making output variable based on weather and daylight availability."));
+  assert.deepEqual(claims, ["Solar energy relies on sunlight."]);
+  assert.ok(claims.every((claim) => !/\bis making\b|\bis daylight availability\b/i.test(claim)));
+});
+
 test("splits technology predicates and relative clauses", () => {
   assert.deepEqual(Array.from(extractAnswerClaims("Bitcoin launched in 2009 and uses a decentralized network.")), [
     "Bitcoin launched in 2009.",

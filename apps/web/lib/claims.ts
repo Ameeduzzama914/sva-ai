@@ -57,10 +57,15 @@ export const extractClaims = (text: string): string[] => {
 };
 
 const ANSWER_CLAIM_LIMIT = 8;
-const ANSWER_META_PATTERN = /\b(source quality|evidence strength|evidence summary|retrieval mode|credibility|trust score|confidence assessment|final confidence|agreement|contradiction penalty|provider status|live coverage|why sva chose|areas? with sparse|lower-authority evidence|reduce certainty|reliability commentary)\b/i;
+const ANSWER_META_PATTERN = /\b(source quality|evidence strength|evidence summary|retrieval mode|credibility|trust score|confidence assessment|final confidence|agreement|contradiction penalty|provider status|live coverage|why sva chose|areas? with sparse|lower-authority evidence|reduce certainty|reliability commentary|in summary)\b/i;
 const URL_OR_DOMAIN_PATTERN = /(?:https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|org|net|gov|edu|io|ai|co|in)\b)/i;
-const FACTUAL_PREDICATE = /\b(is|are|was|were|has|have|had|can|may|might|could|will|would|does|do|did|became|becomes|contains|includes|located|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|founded|established|serves|served|produces|depends|requires|required|uses|used|operates|operated|launched|won|grew|fell|sells|sold|costs|cost)\b/i;
+const FACTUAL_PREDICATE = /\b(is|are|was|were|has|have|had|can|may|might|could|will|would|does|do|did|became|becomes|contains|includes|located|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|founded|established|serves|served|produces|depends|relies|rely|requires|required|uses|used|operates|operated|launched|won|grew|fell|sells|sold|costs|cost|remains|remain)\b/i;
 const ANSWER_STOPWORDS = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "in", "is", "it", "of", "on", "that", "the", "to", "was", "were", "with"]);
+const VERIFICATION_STATUS = "(?:partially\\s+verified|mixed\\s+evidence|not\\s+verified|verified|unsupported|supported|disputed|inconclusive|unverified)";
+const VERIFICATION_STATUS_SUFFIX = new RegExp(`\\s*(?::|[-\\u2013\\u2014])\\s*${VERIFICATION_STATUS}\\s*$`, "i");
+const VERIFICATION_STATUS_PREFIX = new RegExp(`^\\s*${VERIFICATION_STATUS}\\s*:\\s*`, "i");
+const STANDALONE_VERIFICATION_STATUS = new RegExp(`^\\s*${VERIFICATION_STATUS}\\s*$`, "i");
+const UNSAFE_SUBORDINATE_START = /^(?:making|causing|resulting|leading|leaving|allowing|requiring|depending)\b/i;
 
 const answerSimilarityTokens = (claim: string): string[] =>
   normalizeClaim(claim)
@@ -77,7 +82,7 @@ const isAnswerClaim = (claim: string): boolean => {
 };
 
 const MODAL_OR_AUXILIARY = "(?:can|may|might|could|should|must|will|would|does|do|did)";
-const LEXICAL_PREDICATE = "(?:is|are|was|were|has|have|had|became|becomes|contains|includes|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|serves|served|produces|depends|requires|required|uses|used|operates|operated|launched|won|grew|fell|sells|sold|costs|cost)";
+const LEXICAL_PREDICATE = "(?:is|are|was|were|has|have|had|became|becomes|contains|includes|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|serves|served|produces|depends|relies|rely|requires|required|uses|used|operates|operated|launched|won|grew|fell|sells|sold|costs|cost|remains|remain)";
 const PREDICATE_START = new RegExp(`^(?:${MODAL_OR_AUXILIARY}\\s+(?:not\\s+)?[a-z]+|${LEXICAL_PREDICATE})\\b`, "i");
 const SUBJECT_PREDICATE = new RegExp(`^(.+?)\\s+((?:${MODAL_OR_AUXILIARY}\\s+(?:not\\s+)?[a-z]+|${LEXICAL_PREDICATE})\\b.*)$`, "i");
 const SHARED_TIME_SUFFIX = /\b(?:in|during|throughout|by|as of)\s+(?:19|20)\d{2}\s*$/i;
@@ -90,6 +95,12 @@ const parseSubjectPredicate = (clause: string): { subject: string; predicate: st
 };
 
 const withTerminalPunctuation = (claim: string): string => `${claim.replace(/[.!?]+$/, "").trim()}.`;
+
+const stripVerificationCommentary = (sentence: string): string => {
+  const withoutSummaryLead = sentence.replace(/^\s*in summary\s*[:,]\s*/i, "");
+  if (STANDALONE_VERIFICATION_STATUS.test(withoutSummaryLead.replace(/[.!?]+$/, ""))) return "";
+  return withoutSummaryLead.replace(/[.!?]+$/, "").replace(VERIFICATION_STATUS_SUFFIX, "").replace(VERIFICATION_STATUS_PREFIX, "").trim();
+};
 
 const splitCoordinatedPredicates = (sentence: string, forcedSubject?: string): { claims: string[]; subject?: string } => {
   const chunks = sentence.split(/\s+(?:and|but)\s+/i).map((chunk) => chunk.trim()).filter(Boolean);
@@ -147,7 +158,7 @@ const appositiveClaims = (subject: string, phrase: string, scope?: string): stri
   });
 
 const splitAnswerClaim = (sentence: string, priorSubject?: string): { claims: string[]; subject?: string } => {
-  const cleaned = sentence.replace(/^[\s#>*\d.)-]+/, "").replace(/\s+/g, " ").replace(/[.!?]+$/, "").trim();
+  const cleaned = stripVerificationCommentary(sentence.replace(/^[\s#>*\d.)-]+/, "").replace(/\s+/g, " "));
   if (!cleaned) return { claims: [], subject: priorSubject };
 
   const relative = cleaned.match(/^([^,]+),\s+which\s+([^,]+),\s+(.+)$/i);
@@ -163,13 +174,17 @@ const splitAnswerClaim = (sentence: string, priorSubject?: string): { claims: st
   }
 
   const inverted = invertRelationalCopula(parts[0]);
-  const resolvedMain = inverted.claim.replace(/^(It|This (?:city|company|treatment|product|drug)|The (?:city|company))\s+/i, priorSubject ? `${priorSubject} ` : "$&");
+  const resolvedPronoun = inverted.claim.replace(/^(It|This (?:city|company|treatment|product|drug)|The (?:city|company))\s+/i, priorSubject ? `${priorSubject} ` : "$&");
+  const resolvedMain = priorSubject && PREDICATE_START.test(resolvedPronoun)
+    ? `${priorSubject} ${resolvedPronoun.charAt(0).toLowerCase()}${resolvedPronoun.slice(1)}`
+    : resolvedPronoun;
   const parsedMain = parseSubjectPredicate(resolvedMain);
   const subject = inverted.subject ?? parsedMain?.subject ?? priorSubject;
   const claims = splitCoordinatedPredicates(resolvedMain, subject).claims;
 
   for (const tail of parts.slice(1)) {
     if (!subject) continue;
+    if (UNSAFE_SUBORDINATE_START.test(tail)) continue;
     if (PARTICIPIAL_START.test(tail)) {
       const auxiliary = /^(born|founded|established|launched)\b/i.test(tail) ? "was" : "is";
       claims.push(`${subject} ${auxiliary} ${tail}`);
