@@ -451,6 +451,7 @@ const VerificationComposer = ({
 );
 
 const VerificationPipeline = ({ stages }: { stages: PipelineStage[] }) => {
+  const isComplete = stages.every((stage) => stage.state === "complete");
   const tone: Record<PipelineState, string> = {
     complete: "border-emerald-300/50 bg-emerald-300/10 text-emerald-100",
     active: "border-cyan-300/50 bg-cyan-300/10 text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.12)]",
@@ -462,27 +463,20 @@ const VerificationPipeline = ({ stages }: { stages: PipelineStage[] }) => {
   return (
     <ShellPanel>
       <SectionHeader label="Pipeline" title="Verification Pipeline" subtitle="A transparent view of the current verification path. Completion reflects only the data SVA actually received." />
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className={cx("grid md:grid-cols-2 xl:grid-cols-6", isComplete ? "mt-4 gap-2" : "mt-5 gap-3")}>
         {stages.map((stage, index) => (
-          <div key={stage.label} className={cx("relative rounded-2xl border p-3 transition", tone[stage.state])}>
+          <div key={stage.label} className={cx("relative rounded-2xl border transition", isComplete ? "p-2.5" : "p-3", tone[stage.state])}>
             <div className="flex items-center justify-between">
-              <span className="grid h-7 w-7 place-items-center rounded-full border border-current/25 text-xs">{index + 1}</span>
+              <span className={cx("grid place-items-center rounded-full border border-current/25 text-xs", isComplete ? "h-6 w-6" : "h-7 w-7")}>{index + 1}</span>
               <span className="text-[10px] uppercase tracking-[0.14em] opacity-70">{stage.state}</span>
             </div>
-            <p className="mt-3 min-h-10 text-sm leading-5">{stage.label}</p>
+            <p className={cx("text-sm leading-5", isComplete ? "mt-2" : "mt-3 min-h-10")}>{stage.label}</p>
           </div>
         ))}
       </div>
     </ShellPanel>
   );
 };
-
-const QueryCard = ({ prompt, hasRun }: { prompt: string; hasRun: boolean }) => (
-  <ShellPanel className={hasRun ? "" : "hidden"}>
-    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Question submitted</p>
-    <p className="mt-2 text-xl leading-8 text-slate-100">{prompt}</p>
-  </ShellPanel>
-);
 
 const TrustScorePanel = ({ verification, trustScore, trustLabel }: { verification: VerificationResult | null; trustScore: number; trustLabel: string }) => {
   const metrics = verification
@@ -561,11 +555,11 @@ const VerifiedAnswerCard = ({
   const contradictions = getMeaningfulText(verification?.sections?.contradictions);
 
   return (
-    <ShellPanel className="border-emerald-300/20">
+    <ShellPanel className="border-emerald-300/25 bg-emerald-300/[0.045] shadow-[0_24px_80px_rgba(16,185,129,0.07)]">
       <SectionHeader label="Verified Answer" title={verification ? getReliabilityLabel(trustScore) : "Verification Unavailable"} subtitle={verification ? "Final synthesis generated from real returned verification data." : "Run a verification to generate an answer."} />
       {verification ? (
         <div className="mt-5 space-y-4">
-          <div className="rounded-[20px] border border-white/[0.08] bg-[#080B10] p-5">
+          <div className="rounded-[20px] border border-emerald-300/15 bg-[#080B10] p-5 shadow-inner shadow-emerald-950/20">
             <p className="text-base leading-8 text-slate-100 whitespace-pre-line">{answer || canonicalAnswer || "Model response unavailable."}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -625,6 +619,20 @@ const ModelAgreementSection = ({
   isLoading: boolean;
 }) => {
   const liveCount = visibleModels.filter((model) => isLiveModelResponse(sourceMap.get(model))).length;
+  const [expandedModels, setExpandedModels] = useState<Set<ModelName>>(() => new Set());
+
+  useEffect(() => {
+    setExpandedModels(new Set());
+  }, [responses]);
+
+  const toggleExpanded = (model: ModelName) => {
+    setExpandedModels((current) => {
+      const next = new Set(current);
+      if (next.has(model)) next.delete(model);
+      else next.add(model);
+      return next;
+    });
+  };
 
   return (
     <ShellPanel>
@@ -642,8 +650,17 @@ const ModelAgreementSection = ({
           const isMajority = isSuccess && (verification?.majorityModels.includes(model) ?? false);
           const isOutlier = isSuccess && (verification?.outlierModels.includes(model) ?? false);
           const status = getModelStatus({ hasRun: hasRunVerification, isLoading, isSuccess, isMajority, isOutlier, runtime });
+          const responseText = isLoading
+            ? "Waiting for model response..."
+            : !hasRunVerification
+              ? "Ready to participate in verification."
+              : isSuccess
+                ? response?.answer ?? "Model response unavailable."
+                : "Model response unavailable.";
+          const isExpanded = expandedModels.has(model);
+          const canExpand = isSuccess && responseText.length > 220;
           return (
-            <article key={model} className="rounded-[20px] border border-white/[0.08] bg-[#080B10] p-4 transition hover:border-white/[0.14]">
+            <article key={model} className="flex h-full flex-col rounded-[20px] border border-white/[0.08] bg-[#080B10] p-4 transition hover:border-white/[0.14]">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderLogo provider={provider.logoProvider} size="lg" />
@@ -654,16 +671,18 @@ const ModelAgreementSection = ({
                 </div>
                 <Badge variant={status.tone}>{status.label}</Badge>
               </div>
-              <p className="mt-4 line-clamp-5 min-h-[100px] text-sm leading-6 text-slate-400">
-                {isLoading
-                  ? "Waiting for model response..."
-                  : !hasRunVerification
-                    ? "Ready to participate in verification."
-                    : isSuccess
-                      ? response?.answer ?? "Model response unavailable."
-                      : "Model response unavailable."}
-              </p>
-              <p className="mt-3 text-xs text-slate-600">{getProviderAvailabilityLabel(model, providerStatus, runtime)}</p>
+              <p className={cx("mt-4 min-h-24 flex-1 text-sm leading-6 text-slate-400", canExpand && !isExpanded && "line-clamp-4")}>{responseText}</p>
+              {canExpand ? (
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleExpanded(model)}
+                  className="mt-2 self-start text-xs font-semibold text-emerald-200 transition hover:text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40"
+                >
+                  {isExpanded ? "Show less" : "Show more"}
+                </button>
+              ) : null}
+              <p className="mt-3 border-t border-white/[0.05] pt-3 text-xs text-slate-600">{getProviderAvailabilityLabel(model, providerStatus, runtime)}</p>
             </article>
           );
         })}
@@ -678,12 +697,12 @@ const EvidencePanel = ({ evidenceSnippets, meta, isLoading }: { evidenceSnippets
   return (
     <ShellPanel>
       <SectionHeader label="Evidence" title="Evidence Used" subtitle={evidenceSnippets.length ? `${evidenceSnippets.length} returned sources. Retrieval mode: ${meta?.retrievalModeUsed ?? "web"}.` : undefined} />
-      <div className="mt-5 space-y-3">
+      <div className="mt-4 space-y-2.5">
         {isLoading ? (
           <p className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm text-cyan-100">Evidence analysis is still processing.</p>
         ) : sorted.length ? (
           sorted.slice(0, 8).map((snippet, index) => (
-            <article key={`${snippet.title}-${index}`} className="rounded-[18px] border border-white/[0.07] bg-[#080B10] p-4">
+            <article key={`${snippet.title}-${index}`} className="rounded-[18px] border border-white/[0.07] bg-[#080B10] p-3.5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">{snippet.title}</p>
@@ -691,7 +710,7 @@ const EvidencePanel = ({ evidenceSnippets, meta, isLoading }: { evidenceSnippets
                 </div>
                 {getSourceScore(snippet) ? <Badge variant={getSourceScore(snippet) >= 75 ? "success" : getSourceScore(snippet) >= 55 ? "warning" : "neutral"}>{Math.round(getSourceScore(snippet))}%</Badge> : null}
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-400">{snippet.text || "No supporting snippet returned."}</p>
+              <p className="mt-2.5 text-sm leading-6 text-slate-400">{snippet.text || "No supporting snippet returned."}</p>
               {snippet.url ? (
                 <a className="mt-3 inline-flex text-sm text-emerald-200 transition hover:text-emerald-100" href={snippet.url} target="_blank" rel="noreferrer">
                   View source
@@ -737,7 +756,7 @@ const ContradictionPanel = ({ verification }: { verification: VerificationResult
 const ClaimsPanel = ({ verification }: { verification: VerificationResult | null }) => (
   <ShellPanel>
     <SectionHeader label="Claims" title="Claim-Level Verification" subtitle="Only real claim checks returned by the verifier are shown." />
-    <div className="mt-5 overflow-x-auto">
+    <div className="mt-4 overflow-x-auto">
       {verification?.claimVerifications.length ? (
         <table className="min-w-full text-left text-sm">
           <thead>
@@ -751,10 +770,10 @@ const ClaimsPanel = ({ verification }: { verification: VerificationResult | null
           <tbody>
             {verification.claimVerifications.map((claim) => (
               <tr key={claim.id} className="border-b border-white/[0.05] align-top">
-                <td className="max-w-xl px-2 py-3 text-slate-200">{claim.claim}<p className="mt-1 text-xs leading-5 text-slate-500">{claim.explanation}</p></td>
-                <td className="px-2 py-3 text-slate-300">{claim.status.replace(/_/g, " ")}</td>
-                <td className="px-2 py-3 text-slate-300">{claim.confidenceScore}/100</td>
-                <td className="px-2 py-3 text-slate-300">{claim.contradictedByModels.length ? claim.contradictedByModels.join(", ") : "None"}</td>
+                <td className="max-w-xl px-2 py-2.5 text-slate-200">{claim.claim}<p className="mt-1 text-xs leading-5 text-slate-500">{claim.explanation}</p></td>
+                <td className="px-2 py-2.5 text-slate-300">{claim.status.replace(/_/g, " ")}</td>
+                <td className="px-2 py-2.5 text-slate-300">{claim.confidenceScore}/100</td>
+                <td className="px-2 py-2.5 text-slate-300">{claim.contradictedByModels.length ? claim.contradictedByModels.join(", ") : "None"}</td>
               </tr>
             ))}
           </tbody>
@@ -1000,7 +1019,7 @@ ${evidenceReport}
 
           <div className="mx-auto max-w-[1500px] space-y-5 pt-5">
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {!hasRunVerification && !prompt ? <EmptyVerificationState onSelectPrompt={setPrompt} /> : null}
                 <VerificationComposer
                   prompt={prompt}
@@ -1009,7 +1028,6 @@ ${evidenceReport}
                   onPromptChange={handlePromptChange}
                   onSubmit={handleVerify}
                 />
-                <QueryCard prompt={prompt} hasRun={hasRunVerification && Boolean(prompt)} />
                 {errorMessage ? (
                   <ShellPanel className="border-rose-300/30 bg-rose-300/10">
                     <SectionHeader label="Error" title="Verification Unavailable" subtitle={errorMessage} />

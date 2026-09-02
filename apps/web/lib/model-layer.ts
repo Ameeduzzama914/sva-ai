@@ -66,7 +66,7 @@ const proLayer: ModelLayerConfig = {
       brand: "Gemini",
       monogram: "Gm",
       logoProvider: "gemini",
-      badgeLabel: "Gemini 2.0 Flash",
+      badgeLabel: "Gemini 2.5 Flash",
       accent: "from-blue-500/25 via-indigo-600/10 to-slate-950/60 border-blue-500/35",
       logoBg: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
     },
