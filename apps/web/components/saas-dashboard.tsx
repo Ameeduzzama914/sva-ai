@@ -176,6 +176,16 @@ const SectionHeader = ({ label, title, subtitle }: { label?: string; title: stri
   </div>
 );
 
+const SupportMessage = ({ className }: { className?: string }) => (
+  <p className={cx("text-[11px] leading-5 text-slate-500", className)}>
+    Having trouble with SVA? Contact us at{" "}
+    <a className="text-slate-400 underline decoration-white/20 underline-offset-2 transition hover:text-emerald-200" href="mailto:svaofficial.ai@gmail.com">
+      svaofficial.ai@gmail.com
+    </a>
+    . Our support team will assist you within 6–12 hours.
+  </p>
+);
+
 const AppNavigation = ({
   email,
   plan,
@@ -279,6 +289,7 @@ const AppNavigation = ({
         <button type="button" onClick={onLogout} className="mt-4 text-sm text-slate-400 transition hover:text-white">
           Logout
         </button>
+        <SupportMessage className="mt-4 border-t border-white/[0.06] pt-4" />
       </div>
     </aside>
   );
@@ -1095,6 +1106,7 @@ ${evidenceReport}
                 <ClaimsPanel verification={verification} />
               </div>
             ) : null}
+            <SupportMessage className="border-t border-white/[0.06] pt-4 text-center lg:hidden" />
           </div>
         </main>
       </div>
