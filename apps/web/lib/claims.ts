@@ -59,7 +59,7 @@ export const extractClaims = (text: string): string[] => {
 const ANSWER_CLAIM_LIMIT = 8;
 const ANSWER_META_PATTERN = /\b(source quality|evidence strength|evidence summary|retrieval mode|credibility|trust score|confidence assessment|final confidence|agreement|contradiction penalty|provider status|live coverage|why sva chose|areas? with sparse|lower-authority evidence|reduce certainty|reliability commentary)\b/i;
 const URL_OR_DOMAIN_PATTERN = /(?:https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|org|net|gov|edu|io|ai|co|in)\b)/i;
-const FACTUAL_PREDICATE = /\b(is|are|was|were|has|have|became|becomes|contains|includes|located|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|founded|established|serves|served)\b/i;
+const FACTUAL_PREDICATE = /\b(is|are|was|were|has|have|had|can|may|might|could|will|would|does|do|did|became|becomes|contains|includes|located|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|founded|established|serves|served|produces|depends|requires|required|uses|used|operates|operated|launched|won|grew|fell|sells|sold|costs|cost)\b/i;
 const ANSWER_STOPWORDS = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "in", "is", "it", "of", "on", "that", "the", "to", "was", "were", "with"]);
 
 const answerSimilarityTokens = (claim: string): string[] =>
@@ -76,36 +76,110 @@ const isAnswerClaim = (claim: string): boolean => {
   return words.length >= 4 && FACTUAL_PREDICATE.test(claim);
 };
 
-const inferAnswerContext = (sentence: string): { subject?: string; scope?: string } => {
-  const invertedCapital = sentence.match(/^(?:the\s+)?capital\s+of\s+(.+?)\s+is\s+(.+?)[.!?]?$/i);
-  if (invertedCapital) return { subject: invertedCapital[2].trim(), scope: invertedCapital[1].trim() };
-  const directCapital = sentence.match(/^(.+?)\s+is\s+(?:the\s+)?capital\s+of\s+(.+?)[.!?]?$/i);
-  if (directCapital) return { subject: directCapital[1].trim(), scope: directCapital[2].trim() };
-  return {};
+const MODAL_OR_AUXILIARY = "(?:can|may|might|could|should|must|will|would|does|do|did)";
+const LEXICAL_PREDICATE = "(?:is|are|was|were|has|have|had|became|becomes|contains|includes|measures|equals|causes|caused|reduces|reduced|increases|increased|decreases|decreased|prevents|prevented|supports|supported|serves|served|produces|depends|requires|required|uses|used|operates|operated|launched|won|grew|fell|sells|sold|costs|cost)";
+const PREDICATE_START = new RegExp(`^(?:${MODAL_OR_AUXILIARY}\\s+(?:not\\s+)?[a-z]+|${LEXICAL_PREDICATE})\\b`, "i");
+const SUBJECT_PREDICATE = new RegExp(`^(.+?)\\s+((?:${MODAL_OR_AUXILIARY}\\s+(?:not\\s+)?[a-z]+|${LEXICAL_PREDICATE})\\b.*)$`, "i");
+const SHARED_TIME_SUFFIX = /\b(?:in|during|throughout|by|as of)\s+(?:19|20)\d{2}\s*$/i;
+const PARTICIPIAL_START = /^(located|based|born|founded|established|launched|situated|known|used)\b/i;
+
+const parseSubjectPredicate = (clause: string): { subject: string; predicate: string } | undefined => {
+  const match = clause.trim().match(SUBJECT_PREDICATE);
+  if (!match) return undefined;
+  return { subject: match[1].trim(), predicate: match[2].trim() };
 };
 
-const splitAnswerClaim = (sentence: string, priorSubject?: string, priorScope?: string): { claims: string[]; subject?: string; scope?: string } => {
-  const cleaned = sentence.replace(/^[\s#>*\d.)-]+/, "").replace(/\s+/g, " ").trim();
-  if (!cleaned) return { claims: [], subject: priorSubject, scope: priorScope };
+const withTerminalPunctuation = (claim: string): string => `${claim.replace(/[.!?]+$/, "").trim()}.`;
 
-  const inferred = inferAnswerContext(cleaned);
-  const subject = inferred.subject ?? priorSubject;
-  const scope = inferred.scope ?? priorScope;
-  const canonicalCapital = inferred.subject && inferred.scope ? `${inferred.subject} is the capital of ${inferred.scope}` : cleaned;
-  const resolved = canonicalCapital.replace(/^(It|This city|The city)\s+/i, subject ? `${subject} ` : "$&");
-  const compound = resolved.match(/^(.+?)\s+(is|are|was|were)\s+(.+?)\s+and\s+(.+?)[.!?]?$/i);
-  if (!compound) return { claims: [resolved], subject: inferred.subject ?? resolved.match(/^(.+?)\s+(?:is|are|was|were)\b/i)?.[1]?.trim() ?? subject, scope };
+const splitCoordinatedPredicates = (sentence: string, forcedSubject?: string): { claims: string[]; subject?: string } => {
+  const chunks = sentence.split(/\s+(?:and|but)\s+/i).map((chunk) => chunk.trim()).filter(Boolean);
+  const first = parseSubjectPredicate(chunks[0]);
+  if (!first || chunks.length === 1) return { claims: [sentence], subject: first?.subject ?? forcedSubject };
 
-  const [, compoundSubject, verb, leftPredicate, rightPredicate] = compound;
-  const rightScope = rightPredicate.match(/\b(of|in)\s+(.+?)$/i);
-  const rightScopeValue = rightScope?.[2]?.replace(/[.!?]+$/, "").trim();
-  const rightHasGenericScope = Boolean(rightScopeValue && /^(?:a|an|the)\s+(?:sovereign\s+)?state\b/i.test(rightScopeValue));
-  const sharedScope = rightHasGenericScope ? scope : rightScopeValue ?? scope;
-  const leftNeedsScope = /\b(capital|largest city)\b/i.test(leftPredicate) && !/\b(of|in)\b/i.test(leftPredicate);
-  const withArticle = (predicate: string): string => /^(largest|smallest|northernmost|southernmost|oldest|newest)\b/i.test(predicate) ? `the ${predicate}` : predicate;
-  const left = `${compoundSubject} ${verb} ${withArticle(leftPredicate)}${leftNeedsScope && sharedScope ? ` of ${sharedScope}` : ""}`;
-  const right = `${compoundSubject} ${verb} ${withArticle(rightPredicate)}`;
-  return { claims: [left, right], subject: compoundSubject.trim(), scope: sharedScope ?? scope };
+  const subject = forcedSubject ?? first.subject;
+  const sharedTime = sentence.match(SHARED_TIME_SUFFIX)?.[0];
+  const copula = first.predicate.match(/^(is|are|was|were)\b/i)?.[1];
+  const finalScope = chunks.at(-1)?.match(/\b(of|in)\s+((?!a\b|an\b).+)$/i);
+  const claims = [`${subject} ${first.predicate}`];
+
+  for (const chunk of chunks.slice(1)) {
+    const withoutSharedTime = sharedTime ? chunk.replace(new RegExp(`\\s+${sharedTime.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"), "") : chunk;
+    if (PREDICATE_START.test(withoutSharedTime)) {
+      claims.push(`${subject} ${withoutSharedTime}`);
+      continue;
+    }
+    const explicit = parseSubjectPredicate(withoutSharedTime);
+    if (explicit) {
+      claims.push(`${explicit.subject} ${explicit.predicate}`);
+      continue;
+    }
+    if (copula) {
+      const article = /^(?:largest|smallest|northernmost|southernmost|oldest|newest|highest|lowest)\b/i.test(chunk) ? "the " : "";
+      claims.push(`${subject} ${copula} ${article}${chunk}`);
+      continue;
+    }
+    claims[claims.length - 1] += ` and ${chunk}`;
+  }
+
+  if (copula && finalScope && claims.length > 1) {
+    const scopeText = `${finalScope[1]} ${finalScope[2]}`;
+    claims[0] = new RegExp(`\\b(?:of|in)\\s+${finalScope[2].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(claims[0]) ? claims[0] : `${claims[0]} ${scopeText}`;
+  }
+  if (sharedTime && claims.length > 1) {
+    return { claims: claims.map((claim) => new RegExp(`\\b${sharedTime.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(claim) ? claim : `${claim} ${sharedTime}`), subject };
+  }
+  return { claims, subject };
+};
+
+const invertRelationalCopula = (clause: string): { claim: string; subject?: string; scope?: string } => {
+  const match = clause.match(/^(?:the\s+)?(.+?)\s+of\s+(.+?)\s+(is|are|was|were)\s+([^,]+)$/i);
+  if (!match || !/^[A-Z0-9]/.test(match[4].trim()) || match[4].trim().split(/\s+/).length > 8) return { claim: clause };
+  const [, relation, scope, verb, subject] = match;
+  return { claim: `${subject.trim()} ${verb} the ${relation.trim()} of ${scope.trim()}`, subject: subject.trim(), scope: scope.trim() };
+};
+
+const appositiveClaims = (subject: string, phrase: string, scope?: string): string[] =>
+  phrase.split(/\s+and\s+/i).map((part) => {
+    const predicate = part.replace(/^(?:a|an)\s+/i, "").trim();
+    const article = /^(?:the\s+)?(?:largest|smallest|northernmost|southernmost|oldest|newest|highest|lowest)\b/i.test(predicate) && !/^the\s+/i.test(predicate) ? "the " : "";
+    const needsScope = Boolean(scope && /^(?:the\s+)?(?:largest|smallest|oldest|newest|highest|lowest)\b/i.test(predicate) && !/\b(?:of|in|among)\b/i.test(predicate));
+    return `${subject} is ${article}${predicate}${needsScope ? ` in ${scope}` : ""}`;
+  });
+
+const splitAnswerClaim = (sentence: string, priorSubject?: string): { claims: string[]; subject?: string } => {
+  const cleaned = sentence.replace(/^[\s#>*\d.)-]+/, "").replace(/\s+/g, " ").replace(/[.!?]+$/, "").trim();
+  if (!cleaned) return { claims: [], subject: priorSubject };
+
+  const relative = cleaned.match(/^([^,]+),\s+which\s+([^,]+),\s+(.+)$/i);
+  if (relative) {
+    const subject = relative[1].trim();
+    return { claims: [`${subject} ${relative[2].trim()}`, ...splitCoordinatedPredicates(`${subject} ${relative[3].trim()}`, subject).claims], subject };
+  }
+
+  const parts = cleaned.split(/,\s+(?!\d)/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 3 && !parseSubjectPredicate(parts[0]) && !FACTUAL_PREDICATE.test(parts[1]) && PREDICATE_START.test(parts[2])) {
+    const subject = parts[0];
+    return { claims: [`${subject} was ${parts[1].replace(/^(?:a|an)\s+/i, "")}`, ...splitCoordinatedPredicates(`${subject} ${parts.slice(2).join(", ")}`, subject).claims], subject };
+  }
+
+  const inverted = invertRelationalCopula(parts[0]);
+  const resolvedMain = inverted.claim.replace(/^(It|This (?:city|company|treatment|product|drug)|The (?:city|company))\s+/i, priorSubject ? `${priorSubject} ` : "$&");
+  const parsedMain = parseSubjectPredicate(resolvedMain);
+  const subject = inverted.subject ?? parsedMain?.subject ?? priorSubject;
+  const claims = splitCoordinatedPredicates(resolvedMain, subject).claims;
+
+  for (const tail of parts.slice(1)) {
+    if (!subject) continue;
+    if (PARTICIPIAL_START.test(tail)) {
+      const auxiliary = /^(born|founded|established|launched)\b/i.test(tail) ? "was" : "is";
+      claims.push(`${subject} ${auxiliary} ${tail}`);
+    } else if (!FACTUAL_PREDICATE.test(tail)) {
+      claims.push(...appositiveClaims(subject, tail, inverted.scope));
+    } else {
+      claims.push(...splitCoordinatedPredicates(`${subject} ${tail}`, subject).claims);
+    }
+  }
+  return { claims, subject };
 };
 
 export const extractAnswerClaims = (text: string, limit = ANSWER_CLAIM_LIMIT): string[] => {
@@ -115,12 +189,10 @@ export const extractAnswerClaims = (text: string, limit = ANSWER_CLAIM_LIMIT): s
     .filter(Boolean);
   const candidates: string[] = [];
   let subject: string | undefined;
-  let scope: string | undefined;
 
   for (const sentence of sentences) {
-    const atomic = splitAnswerClaim(sentence, subject, scope);
+    const atomic = splitAnswerClaim(sentence, subject);
     subject = atomic.subject ?? subject;
-    scope = atomic.scope ?? scope;
     candidates.push(...atomic.claims);
   }
 
@@ -131,7 +203,7 @@ export const extractAnswerClaims = (text: string, limit = ANSWER_CLAIM_LIMIT): s
     if (!isAnswerClaim(claim)) continue;
     const tokens = answerSimilarityTokens(claim);
     if (acceptedTokens.some((existing) => tokenOverlap(existing, tokens) >= 0.72)) continue;
-    accepted.push(`${claim}.`);
+    accepted.push(withTerminalPunctuation(claim));
     acceptedTokens.push(tokens);
     if (accepted.length >= Math.max(1, limit)) break;
   }
