@@ -1,7 +1,7 @@
 ﻿import { getSvaPlan } from "../plans";
 import { hasSuccessfulPaymentRecord, insertPaymentRecord } from "./payments";
 import type { PaidPlan } from "./razorpay";
-import { fetchPublicUserByEmailFromSupabase } from "./supabase-admin";
+import { fetchPublicUserByEmailFromSupabase, isSupabaseAdminConfigured } from "./supabase-admin";
 import { updateSupabasePaidPlanByEmail } from "./supabase-plan";
 import { getUserByEmail, toPublicUser, trackEvent, upgradeUserPlan, type PublicUser } from "./store";
 
@@ -49,8 +49,24 @@ export const activatePaidPlanAfterPayment = async ({
   const duplicatePayment = await hasSuccessfulPaymentRecord(razorpayPaymentId);
   if (duplicatePayment) {
     const supabaseUser = await fetchPublicUserByEmailFromSupabase(user.email);
-    if (supabaseUser) {
+    if (supabaseUser?.plan === plan) {
       return { ok: true, user: supabaseUser, message: paymentSuccessMessage(plan) };
+    }
+    if (isSupabaseAdminConfigured()) {
+      console.warn("[payment-upgrade] valid payment is missing its durable entitlement; retrying activation.", {
+        razorpayPaymentId,
+        requestedPlan: plan,
+        currentPlan: supabaseUser?.plan ?? "missing"
+      });
+      const reconciledUser = await updateSupabasePaidPlanByEmail(user.email, plan);
+      if (reconciledUser?.plan === plan) {
+        return { ok: true, user: reconciledUser, message: paymentSuccessMessage(plan) };
+      }
+      console.error("[payment-upgrade] duplicate payment entitlement reconciliation failed.", {
+        razorpayPaymentId,
+        requestedPlan: plan
+      });
+      return { ok: false, status: 500, message: "Payment is verified, but plan activation is pending. Contact support; do not pay again." };
     }
     const localUser = await getUserByEmail(user.email);
     if (localUser) {
@@ -59,7 +75,7 @@ export const activatePaidPlanAfterPayment = async ({
     return { ok: true, user: verifiedLocalPaymentUser(user, plan), message: paymentSuccessMessage(plan) };
   }
   const supabaseUser = await updateSupabasePaidPlanByEmail(user.email, plan);
-  if (supabaseUser) {
+  if (supabaseUser?.plan === plan) {
     await insertPaymentRecord({
       userId: supabaseUser.userId,
       email: supabaseUser.email,
@@ -74,6 +90,26 @@ export const activatePaidPlanAfterPayment = async ({
     });
     await trackEvent("upgraded_to_pro", supabaseUser.userId, { plan, paymentProvider, paymentSource });
     return { ok: true, user: supabaseUser, message: paymentSuccessMessage(plan) };
+  }
+
+  if (isSupabaseAdminConfigured()) {
+    await insertPaymentRecord({
+      userId: user.userId,
+      email: user.email,
+      plan,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      amountPaise: paymentAmountPaise,
+      status: "failed",
+      provider: paymentProvider,
+      source: `${paymentSource}_activation_failed`
+    });
+    console.error("[payment-upgrade] durable entitlement activation failed after payment verification.", {
+      razorpayPaymentId,
+      requestedPlan: plan
+    });
+    return { ok: false, status: 500, message: "Payment is verified, but plan activation is pending. Contact support; do not pay again." };
   }
 
   const localUser = await getUserByEmail(user.email);

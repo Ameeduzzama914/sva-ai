@@ -78,34 +78,30 @@ export const updateSupabasePaidPlanByEmail = async (email: string, plan: Exclude
   const dailyResetAt = nextDailyResetAt();
   const billingPeriodEnd = nextBillingPeriodEnd();
 
-  const payload = {
-    email: normalizedEmail,
+  const userPayload = {
     plan,
-    daily_limit: planConfig.dailyVerificationLimit,
-    monthly_limit: planConfig.monthlyVerificationLimit,
     credits_remaining: planConfig.dailyVerificationLimit,
     credits_reset_at: dailyResetAt,
     billing_period_start: now,
     billing_period_end: billingPeriodEnd,
-    active_verifications: 0,
     daily_usage: 0,
     monthly_usage: 0,
     status: "active",
     updated_at: now
   };
 
-  const { data, error } = await client
+  const existingUser = await client
     .from("sva_users")
-    .upsert(payload, { onConflict: "email" })
     .select("*")
-    .single();
+    .ilike("email", normalizedEmail)
+    .maybeSingle();
 
-  if (error) {
-    console.error("[supabase-plan] upsert paid plan:", error.message);
+  if (existingUser.error || !existingUser.data) {
+    console.error("[supabase-plan] find paid plan user:", existingUser.error?.message ?? "No matching durable SVA user row.");
     return null;
   }
 
-  const row = data as Row;
+  const row = existingUser.data as Row;
   const userId = pickString(row, ["user_id", "id"]);
   if (userId) {
     const subscriptionResult = await client.from("subscriptions").upsert(
@@ -123,6 +119,7 @@ export const updateSupabasePaidPlanByEmail = async (email: string, plan: Exclude
 
     if (subscriptionResult.error) {
       console.error("[supabase-plan] upsert subscription:", subscriptionResult.error.message);
+      return null;
     }
 
     const balanceResult = await client.from("usage_balances").upsert(
@@ -144,10 +141,53 @@ export const updateSupabasePaidPlanByEmail = async (email: string, plan: Exclude
 
     if (balanceResult.error) {
       console.error("[supabase-plan] upsert usage balance:", balanceResult.error.message);
+      return null;
     }
+  } else {
+    console.error("[supabase-plan] paid plan update returned no durable user id.");
+    return null;
   }
 
-  return mapPublicUserRow(row);
+  const userUpdate = await client
+    .from("sva_users")
+    .update(userPayload)
+    .eq("user_id", userId)
+    .select("*")
+    .maybeSingle();
+  if (userUpdate.error || !userUpdate.data) {
+    console.error("[supabase-plan] update paid plan:", userUpdate.error?.message ?? "Durable SVA user update returned no row.");
+    return null;
+  }
+
+  const [confirmedUser, confirmedSubscription, confirmedBalance] = await Promise.all([
+    client.from("sva_users").select("*").eq("user_id", userId).maybeSingle(),
+    client.from("subscriptions").select("plan, status").eq("user_id", userId).maybeSingle(),
+    client.from("usage_balances").select("plan, daily_limit, monthly_limit").eq("user_id", userId).maybeSingle()
+  ]);
+  const confirmedUserRow = confirmedUser.data as Row | null;
+  const confirmedPlan = confirmedUserRow ? pickString(confirmedUserRow, ["plan"]) : "";
+  const entitlementConfirmed =
+    !confirmedUser.error &&
+    !confirmedSubscription.error &&
+    !confirmedBalance.error &&
+    confirmedPlan === plan &&
+    confirmedSubscription.data?.plan === plan &&
+    confirmedSubscription.data?.status === "active" &&
+    confirmedBalance.data?.plan === plan &&
+    confirmedBalance.data?.daily_limit === planConfig.dailyVerificationLimit &&
+    confirmedBalance.data?.monthly_limit === planConfig.monthlyVerificationLimit;
+
+  if (!entitlementConfirmed || !confirmedUserRow) {
+    console.error("[supabase-plan] durable paid entitlement confirmation failed.", {
+      plan,
+      userConfigured: Boolean(confirmedUser.data),
+      subscriptionConfigured: Boolean(confirmedSubscription.data),
+      usageBalanceConfigured: Boolean(confirmedBalance.data)
+    });
+    return null;
+  }
+
+  return mapPublicUserRow(confirmedUserRow);
 };
 
 export const renewSupabasePaidPlan = async (input: {
