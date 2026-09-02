@@ -21,3 +21,13 @@ test("evidence and claims retain their grid widths but align to natural top heig
   assert.match(dashboard, /grid items-start gap-5 xl:grid-cols-\[minmax\(0,1\.1fr\)_minmax\(0,0\.9fr\)\]/);
   assert.match(dashboard, /<EvidencePanel[\s\S]*?<ClaimsPanel/);
 });
+
+test("support contact is unconditional, mail-enabled, and safely copyable", () => {
+  assert.match(dashboard, /const SUPPORT_EMAIL = "svaofficial\.ai@gmail\.com"/);
+  assert.match(dashboard, /href=\{`mailto:\$\{SUPPORT_EMAIL\}`\}/);
+  assert.match(dashboard, /navigator\.clipboard\.writeText\(SUPPORT_EMAIL\)/);
+  assert.match(dashboard, /setCopied\(true\);[\s\S]*?setTimeout\(\(\) => setCopied\(false\), 1800\)/);
+  assert.match(dashboard, /aria-label="Copy support email address"/);
+  assert.match(dashboard, /\{copied \? "Copied!" : "Copy email"\}/);
+  assert.equal((dashboard.match(/<SupportMessage/g) ?? []).length, 2);
+});

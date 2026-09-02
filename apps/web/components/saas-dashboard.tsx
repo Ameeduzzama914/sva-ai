@@ -176,15 +176,43 @@ const SectionHeader = ({ label, title, subtitle }: { label?: string; title: stri
   </div>
 );
 
-const SupportMessage = ({ className }: { className?: string }) => (
-  <p className={cx("text-[11px] leading-5 text-slate-500", className)}>
-    Having trouble with SVA? Contact us at{" "}
-    <a className="text-slate-400 underline decoration-white/20 underline-offset-2 transition hover:text-emerald-200" href="mailto:svaofficial.ai@gmail.com">
-      svaofficial.ai@gmail.com
-    </a>
-    . Our support team will assist you within 6–12 hours.
-  </p>
-);
+const SUPPORT_EMAIL = "svaofficial.ai@gmail.com";
+
+const SupportMessage = ({ className }: { className?: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const copyEmail = async () => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(SUPPORT_EMAIL);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className={cx("text-xs leading-5 text-slate-500", className)}>
+      <p className="font-semibold text-slate-300">Having trouble with SVA?</p>
+      <p className="mt-1">
+        Contact us at{" "}
+        <a className="text-slate-400 underline decoration-white/20 underline-offset-2 transition hover:text-emerald-200" href={`mailto:${SUPPORT_EMAIL}`}>
+          {SUPPORT_EMAIL}
+        </a>
+        . Our support team will assist you within 6–12 hours.
+      </p>
+      <button
+        type="button"
+        aria-label="Copy support email address"
+        onClick={copyEmail}
+        className="mt-2 inline-flex min-h-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] px-2.5 text-[11px] font-medium text-slate-400 transition hover:border-white/[0.14] hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/40"
+      >
+        {copied ? "Copied!" : "Copy email"}
+      </button>
+    </div>
+  );
+};
 
 const AppNavigation = ({
   email,
