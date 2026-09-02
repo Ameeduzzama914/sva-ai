@@ -63,15 +63,15 @@ test("zero-cost plan simulation proves Pro and Ultra paid limits without self-pa
 
 test("Razorpay production paths require genuine verified payment and reject client-controlled access", () => {
   assert.match(createOrderRoute, /getPaymentSessionUser\(request\)/);
-  assert.match(createOrderRoute, /RAZORPAY_PLAN_PRICES\[body\.plan\]/);
+  assert.match(createOrderRoute, /resolveRazorpayPriceForUser\(body\.plan, user\.email\)/);
   assert.match(createOrderRoute, /currency: "INR"/);
   assert.doesNotMatch(createOrderRoute, /body\.(amount|currency|price|credits|dailyLimit|monthlyLimit|daily_limit|monthly_limit)/);
 
   assert.match(verifyPaymentRoute, /verifyRazorpaySignature/);
   assert.match(verifyPaymentRoute, /razorpay\.orders\.fetch\(orderId\)/);
-  assert.match(verifyPaymentRoute, /orderPlan !== plan/);
-  assert.match(verifyPaymentRoute, /order\.amount !== expectedPrice\.amount/);
-  assert.match(verifyPaymentRoute, /order\.currency !== "INR"/);
+  assert.match(verifyPaymentRoute, /validateRazorpayOrderPricing/);
+  assert.match(verifyPaymentRoute, /authenticatedUserId: user\.userId/);
+  assert.match(verifyPaymentRoute, /authenticatedEmail: user\.email/);
   assert.match(verifyPaymentRoute, /activatePaidPlanAfterPayment/);
 
   assert.match(webhookRoute, /request\.text\(\)/);

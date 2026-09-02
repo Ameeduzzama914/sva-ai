@@ -4,7 +4,7 @@ import {
   getRazorpayConfig,
   isPaidPlan,
   missingRazorpayKeysMessage,
-  RAZORPAY_PLAN_PRICES
+  resolveRazorpayPriceForUser
 } from "../../../../../lib/server/razorpay";
 
 type RazorpayOrdersClient = {
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: missingRazorpayKeysMessage }, { status: 500 });
   }
 
-  const price = RAZORPAY_PLAN_PRICES[body.plan];
+  const price = resolveRazorpayPriceForUser(body.plan, user.email);
   const receipt = `sva_${body.plan}_${user.userId}_${Date.now()}`.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 40);
 
   try {
@@ -48,7 +48,8 @@ export async function POST(request: Request) {
         user_id: user.userId,
         user_email: user.email,
         plan: body.plan,
-        product: "SVA"
+        product: "SVA",
+        pricing_context: price.pricingContext
       }
     });
 

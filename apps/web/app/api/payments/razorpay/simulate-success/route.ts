@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPaymentSessionUser } from "../../../../../lib/server/payment-session";
 import { activatePaidPlanAfterPayment } from "../../../../../lib/server/payment-upgrade";
-import { isPaidPlan } from "../../../../../lib/server/razorpay";
+import { isPaidPlan, RAZORPAY_PLAN_PRICES } from "../../../../../lib/server/razorpay";
 
 type Body = {
   plan?: unknown;
@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     razorpayOrderId: `sim_order_${plan}_${now}`,
     razorpayPaymentId: `sim_payment_${plan}_${now}`,
     razorpaySignature: "local_payment_simulation",
+    paymentAmountPaise: RAZORPAY_PLAN_PRICES[plan].amount,
     paymentProvider: "local_payment_simulation",
     paymentSource: "local_payment_simulation"
   });

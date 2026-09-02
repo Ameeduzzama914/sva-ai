@@ -11,6 +11,7 @@ type PaymentActivationInput = {
   razorpayOrderId: string;
   razorpayPaymentId: string;
   razorpaySignature?: string;
+  paymentAmountPaise: number;
   paymentProvider: string;
   paymentSource: string;
 };
@@ -41,6 +42,7 @@ export const activatePaidPlanAfterPayment = async ({
   razorpayOrderId,
   razorpayPaymentId,
   razorpaySignature,
+  paymentAmountPaise,
   paymentProvider,
   paymentSource
 }: PaymentActivationInput): Promise<PaymentActivationResult> => {
@@ -65,6 +67,7 @@ export const activatePaidPlanAfterPayment = async ({
       razorpayOrderId,
       razorpayPaymentId,
       razorpaySignature,
+      amountPaise: paymentAmountPaise,
       status: "success",
       provider: paymentProvider,
       source: paymentSource
@@ -87,6 +90,7 @@ export const activatePaidPlanAfterPayment = async ({
       razorpayOrderId,
       razorpayPaymentId,
       razorpaySignature,
+      amountPaise: paymentAmountPaise,
       status: "success",
       provider: paymentProvider,
       source: paymentSource
@@ -104,6 +108,7 @@ export const activatePaidPlanAfterPayment = async ({
     razorpayOrderId,
     razorpayPaymentId,
     razorpaySignature,
+    amountPaise: paymentAmountPaise,
     status: "success",
     provider: paymentProvider,
     source: paymentSource

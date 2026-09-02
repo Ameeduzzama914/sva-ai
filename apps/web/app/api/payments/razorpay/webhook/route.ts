@@ -4,7 +4,14 @@ import { getSvaPlan } from "../../../../../lib/plans";
 import { createAdminAlert } from "../../../../../lib/server/admin-alerts";
 import { activatePaidPlanAfterPayment } from "../../../../../lib/server/payment-upgrade";
 import { hasSuccessfulBillingTransaction, insertPaymentRecord } from "../../../../../lib/server/payments";
-import { getRazorpayConfig, isPaidPlan, RAZORPAY_PLAN_PRICES } from "../../../../../lib/server/razorpay";
+import {
+  CONTROLLED_LIVE_TEST_AMOUNTS,
+  CONTROLLED_LIVE_TEST_PRICING_CONTEXT,
+  getRazorpayConfig,
+  isPaidPlan,
+  RAZORPAY_PLAN_PRICES,
+  validateRazorpayOrderPricing
+} from "../../../../../lib/server/razorpay";
 import { markSupabaseSubscriptionCancellation, renewSupabasePaidPlan } from "../../../../../lib/server/supabase-plan";
 import { getSupabaseAdminClient } from "../../../../../lib/server/supabase-admin";
 import type { PublicUser } from "../../../../../lib/server/store";
@@ -147,6 +154,7 @@ const handleRenewalEvent = async (eventId: string, eventType: string, payload: R
     razorpaySubscriptionId: asString(subscription?.id) || asString(invoice?.subscription_id) || undefined,
     billingPeriodStart: asEpochIso(invoice?.period_start) ?? asEpochIso(subscription?.current_start),
     billingPeriodEnd: asEpochIso(invoice?.period_end) ?? asEpochIso(subscription?.current_end),
+    amountPaise: expectedPrice.amount,
     status: "success",
     provider: "razorpay",
     source: "razorpay_subscription_renewal"
@@ -241,8 +249,19 @@ export async function POST(request: Request) {
   const orderFromPayload = payload.payload?.order?.entity;
   const orderId = asString(payment?.order_id) || asString(orderFromPayload?.id);
   const paymentId = asString(payment?.id) || orderId;
-  const order = orderFromPayload ?? (await fetchOrder(orderId));
-  const notes = metadataFrom(order?.notes, payment?.notes);
+  const payloadNotes = metadataFrom(orderFromPayload?.notes, payment?.notes);
+  const payloadAmount = payment?.amount ?? orderFromPayload?.amount;
+  const requiresAuthoritativeOrder =
+    asString(payloadNotes.pricing_context) === CONTROLLED_LIVE_TEST_PRICING_CONTEXT ||
+    payloadAmount === CONTROLLED_LIVE_TEST_AMOUNTS.pro ||
+    payloadAmount === CONTROLLED_LIVE_TEST_AMOUNTS.ultra;
+  const fetchedOrder = requiresAuthoritativeOrder || !orderFromPayload ? await fetchOrder(orderId) : null;
+  if (requiresAuthoritativeOrder && !fetchedOrder) {
+    await markWebhookEvent(eventId, eventType, "failed", "Controlled payment order could not be verified with Razorpay.");
+    return NextResponse.json({ ok: false, message: "Payment order could not be verified." }, { status: 502 });
+  }
+  const order = fetchedOrder ?? orderFromPayload;
+  const notes = metadataFrom(payment?.notes, order?.notes);
   const plan = asString(notes.plan);
   const userId = asString(notes.user_id);
   const email = asString(notes.user_email).toLowerCase();
@@ -252,10 +271,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Webhook payload missing required metadata." }, { status: 400 });
   }
 
-  const expectedPrice = RAZORPAY_PLAN_PRICES[plan];
   const amount = payment?.amount ?? order?.amount;
   const currency = payment?.currency ?? order?.currency;
-  if (amount !== expectedPrice.amount || currency !== "INR") {
+  const pricing = validateRazorpayOrderPricing({
+    plan,
+    authenticatedUserId: userId,
+    authenticatedEmail: email,
+    amount: order?.amount ?? amount,
+    currency: order?.currency ?? currency,
+    notes
+  });
+  if (!pricing.ok || amount !== pricing.amount || currency !== "INR") {
     await markWebhookEvent(eventId, eventType, "failed", "Webhook amount or currency mismatch.");
     return NextResponse.json({ ok: false, message: "Webhook amount or currency mismatch." }, { status: 400 });
   }
@@ -271,6 +297,7 @@ export async function POST(request: Request) {
     razorpayOrderId: orderId,
     razorpayPaymentId: paymentId,
     razorpaySignature: signature,
+    paymentAmountPaise: pricing.amount,
     paymentProvider: "razorpay",
     paymentSource: "razorpay_webhook"
   });

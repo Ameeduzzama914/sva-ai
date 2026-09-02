@@ -6,7 +6,7 @@ import {
   getRazorpayConfig,
   isPaidPlan,
   missingRazorpayKeysMessage,
-  RAZORPAY_PLAN_PRICES,
+  validateRazorpayOrderPricing,
   verifyRazorpaySignature
 } from "../../../../../lib/server/razorpay";
 
@@ -72,14 +72,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Payment verification failed. No plan change was made." }, { status: 400 });
   }
 
+  let validatedAmount: number;
   try {
     const Razorpay = (await import("razorpay")).default;
     const razorpay = new Razorpay({ key_id: config.keyId, key_secret: config.keySecret }) as RazorpayOrdersClient;
     const order = await razorpay.orders.fetch(orderId);
-    const orderPlan = asString(order.notes?.plan);
-    const expectedPrice = RAZORPAY_PLAN_PRICES[plan];
+    const pricing = validateRazorpayOrderPricing({
+      plan,
+      authenticatedUserId: user.userId,
+      authenticatedEmail: user.email,
+      amount: order.amount,
+      currency: order.currency,
+      notes: order.notes
+    });
 
-    if (orderPlan !== plan || order.amount !== expectedPrice.amount || order.currency !== "INR") {
+    if (!pricing.ok) {
       await insertPaymentRecord({
         userId: user.userId,
         email: user.email,
@@ -93,6 +100,7 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ ok: false, message: "Payment order did not match the selected plan. No plan change was made." }, { status: 400 });
     }
+    validatedAmount = pricing.amount;
   } catch (error) {
     console.error("[razorpay] order validation failed:", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json({ ok: false, message: "Unable to confirm Razorpay order. No plan change was made." }, { status: 502 });
@@ -104,6 +112,7 @@ export async function POST(request: Request) {
     razorpayOrderId: orderId,
     razorpayPaymentId: paymentId,
     razorpaySignature: signature,
+    paymentAmountPaise: validatedAmount,
     paymentProvider: "razorpay",
     paymentSource: "razorpay_checkout"
   });

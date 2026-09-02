@@ -69,6 +69,7 @@ export const insertPaymentRecord = async (input: {
   razorpayOrderId: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
+  amountPaise?: number;
   status: PaymentStatus;
   provider?: string;
   source?: string;
@@ -86,7 +87,7 @@ export const insertPaymentRecord = async (input: {
     user_id: toNullableUuid(input.userId),
     email: input.email,
     plan: input.plan,
-    amount: RAZORPAY_PLAN_PRICES[input.plan].amount,
+    amount: Number.isInteger(input.amountPaise) && (input.amountPaise ?? 0) > 0 ? input.amountPaise : RAZORPAY_PLAN_PRICES[input.plan].amount,
     currency: "INR",
     razorpay_order_id: input.razorpayOrderId,
     razorpay_payment_id: input.razorpayPaymentId ?? null,

@@ -14,7 +14,7 @@ const paymentUpgrade = read("lib/server/payment-upgrade.ts");
 test("Razorpay amounts and currency are server-authoritative", () => {
   assert.match(plans, /pro: \{[\s\S]*razorpayAmountPaise: 79900/);
   assert.match(plans, /ultra: \{[\s\S]*razorpayAmountPaise: 129900/);
-  assert.match(createOrderRoute, /RAZORPAY_PLAN_PRICES\[body\.plan\]/);
+  assert.match(createOrderRoute, /resolveRazorpayPriceForUser\(body\.plan, user\.email\)/);
   assert.match(createOrderRoute, /amount: price\.amount/);
   assert.match(createOrderRoute, /currency: "INR"/);
   assert.doesNotMatch(createOrderRoute, /body\.(amount|currency|price|credits|monthly_limit|daily_limit)/);
@@ -22,9 +22,9 @@ test("Razorpay amounts and currency are server-authoritative", () => {
 
 test("Razorpay verification rejects tampered signatures, plan, amount, and currency", () => {
   assert.match(verifyPaymentRoute, /verifyRazorpaySignature/);
-  assert.match(verifyPaymentRoute, /orderPlan !== plan/);
-  assert.match(verifyPaymentRoute, /order\.amount !== expectedPrice\.amount/);
-  assert.match(verifyPaymentRoute, /order\.currency !== "INR"/);
+  assert.match(verifyPaymentRoute, /validateRazorpayOrderPricing/);
+  assert.match(verifyPaymentRoute, /authenticatedUserId: user\.userId/);
+  assert.match(verifyPaymentRoute, /authenticatedEmail: user\.email/);
   assert.match(verifyPaymentRoute, /No plan change was made/);
 });
 
