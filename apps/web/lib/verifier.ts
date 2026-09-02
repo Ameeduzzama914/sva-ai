@@ -15,7 +15,7 @@ import {
   type VerificationResult,
   type RuntimeProviderStatus
 } from "./models";
-import { extractClaims } from "./claims";
+import { extractAnswerClaims, extractClaims } from "./claims";
 import { retrievalProvider } from "./retrieval";
 import { boundPaidEvidenceSnippets } from "./response-shaping";
 import { scoreDomainAuthority, sourceCategory, sourceTrustLabel } from "./sourceAuthority";
@@ -767,13 +767,12 @@ const clusterClaims = (claims: string[]): string[] => {
   return clusters;
 };
 
-const verifyClaims = (
-  finalAnswer: string,
+const verifyClaimCandidates = (
+  claims: string[],
   responses: ModelResponse[],
   evidenceSnippets: EvidenceSnippet[],
   outlierModels: ModelName[]
 ): ClaimVerification[] => {
-  const claims = clusterClaims(extractClaims(finalAnswer));
   console.log("SVA_DEBUG_CLAIMS", { extractedCount: claims.length, claims });
 
   return claims.map((claim, index) => {
@@ -868,6 +867,28 @@ const verifyClaims = (
       explanation
     };
   });
+};
+
+const verifyClaims = (
+  finalAnswer: string,
+  responses: ModelResponse[],
+  evidenceSnippets: EvidenceSnippet[],
+  outlierModels: ModelName[]
+): ClaimVerification[] => verifyClaimCandidates(clusterClaims(extractClaims(finalAnswer)), responses, evidenceSnippets, outlierModels);
+
+export const refreshClaimVerificationsFromAnswer = (
+  verification: VerificationResult,
+  finalAnswer: string,
+  responses: ModelResponse[],
+  evidenceSnippets: EvidenceSnippet[]
+): VerificationResult => {
+  const answerClaims = extractAnswerClaims(finalAnswer);
+  const fallbackClaims = answerClaims.length > 0 ? [] : responses.flatMap((response) => extractAnswerClaims(response.answer, 4));
+  const claims = answerClaims.length > 0 ? answerClaims : extractAnswerClaims(fallbackClaims.join("\n"));
+  return {
+    ...verification,
+    claimVerifications: verifyClaimCandidates(claims, responses, evidenceSnippets, verification.outlierModels)
+  };
 };
 
 const buildVerificationSections = (finalAnswerCore: string, evidenceSnippets: EvidenceSnippet[], contradictionText: string, contradictionScore: number, consensusLabel: string): {coreConclusion:string;evidenceSummary:string;risksAndCaveats:string;contradictions:string;scientificConsensusSummary:string} => {

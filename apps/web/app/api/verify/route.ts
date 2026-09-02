@@ -20,7 +20,7 @@ import {
   type VerificationReservation
 } from "../../../lib/server/verification-reservations";
 import { applySynthesisAnswer, synthesizeVerificationAnswer } from "../../../lib/providers/synthesis";
-import { buildResponsesForPrompt, verifyResponses } from "../../../lib/verifier";
+import { buildResponsesForPrompt, refreshClaimVerificationsFromAnswer, verifyResponses } from "../../../lib/verifier";
 
 interface VerifyRequestBody {
   prompt?: string;
@@ -164,6 +164,7 @@ export async function POST(request: Request) {
       );
     }
     verification = applySynthesisAnswer(verification, synthesis.answer);
+    verification = refreshClaimVerificationsFromAnswer(verification, synthesis.answer, validResponses, safeEvidenceSnippets);
     const warnings: string[] = [];
 
     if (failedModelCount === 1) warnings.push("Two independent model families completed this verification. One provider was temporarily unavailable.");
