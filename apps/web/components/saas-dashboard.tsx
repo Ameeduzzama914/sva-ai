@@ -1044,26 +1044,30 @@ ${evidenceReport}
                     </ul>
                   </ShellPanel>
                 ) : null}
-                <VerificationPipeline stages={stages} />
-                <ModelAgreementSection
-                  responses={responses}
-                  sourceMap={sourceMap}
-                  runtimeProviderStatus={runtimeProviderStatus}
-                  providerStatus={providerStatus}
-                  modelLayer={modelLayer}
-                  verification={verification}
-                  hasRunVerification={hasRunVerification}
-                  isLoading={isLoading}
-                />
-                <VerifiedAnswerCard
-                  verification={verification}
-                  trustScore={trustScore}
-                  canonicalAnswer={canonicalAnswer}
-                  actionMessage={actionMessage}
-                  onCopy={handleCopyAnswer}
-                  onExport={handleExportReport}
-                  onShare={handleShareAnswer}
-                />
+                {hasRunVerification ? (
+                  <>
+                    <VerificationPipeline stages={stages} />
+                    <ModelAgreementSection
+                      responses={responses}
+                      sourceMap={sourceMap}
+                      runtimeProviderStatus={runtimeProviderStatus}
+                      providerStatus={providerStatus}
+                      modelLayer={modelLayer}
+                      verification={verification}
+                      hasRunVerification={hasRunVerification}
+                      isLoading={isLoading}
+                    />
+                    <VerifiedAnswerCard
+                      verification={verification}
+                      trustScore={trustScore}
+                      canonicalAnswer={canonicalAnswer}
+                      actionMessage={actionMessage}
+                      onCopy={handleCopyAnswer}
+                      onExport={handleExportReport}
+                      onShare={handleShareAnswer}
+                    />
+                  </>
+                ) : null}
               </div>
               <div className="space-y-5">
                 <TrustScorePanel verification={verification} trustScore={trustScore} trustLabel={trustLabel} />
@@ -1085,10 +1089,12 @@ ${evidenceReport}
               </div>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-              <EvidencePanel evidenceSnippets={evidenceSnippets} meta={meta} isLoading={isLoading} />
-              <ClaimsPanel verification={verification} />
-            </div>
+            {hasRunVerification ? (
+              <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                <EvidencePanel evidenceSnippets={evidenceSnippets} meta={meta} isLoading={isLoading} />
+                <ClaimsPanel verification={verification} />
+              </div>
+            ) : null}
           </div>
         </main>
       </div>
