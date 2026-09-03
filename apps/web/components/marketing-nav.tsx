@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession, logout } from "../lib/client-auth";
@@ -16,7 +17,14 @@ export const MarketingNav = () => {
     <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#05070a]/88 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link href="/" aria-label="Go to SVA home" className="flex min-w-0 items-center gap-2.5 rounded-xl transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50">
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-300/25 bg-emerald-300/10 text-xs font-bold text-emerald-100 shadow-[0_0_24px_rgba(16,185,129,0.10)]">SVA</span>
+          <Image
+            src="/sva-logo.png"
+            alt="SVA logo"
+            width={36}
+            height={36}
+            className="h-9 w-9 shrink-0 rounded-xl object-cover shadow-[0_0_24px_rgba(16,185,129,0.10)]"
+            priority
+          />
           <span><span className="block text-base font-semibold tracking-tight text-white">SVA</span><span className="hidden text-[10px] text-slate-500 sm:block">Super Verified AI</span></span>
         </Link>
         <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
