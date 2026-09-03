@@ -14,6 +14,9 @@ type Row = Record<string, unknown>;
 const isUserPlan = (value: unknown): value is UserPlan =>
   value === "free" || value === "pro" || value === "ultra";
 
+const isPaidPlan = (value: unknown): value is Exclude<UserPlan, "free"> =>
+  value === "pro" || value === "ultra";
+
 const pickString = (row: Row, keys: string[]): string => {
   for (const key of keys) {
     const value = row[key];
@@ -177,6 +180,19 @@ export const fetchPublicUserByIdFromSupabase = async (userId: string): Promise<P
   return data ? mapPublicUserRow(data as Row) : null;
 };
 
+export const resolveEmailRelinkPlan = (
+  existingPlan: unknown,
+  subscription: { plan?: unknown; status?: unknown; current_period_end?: unknown } | null,
+  nowMs = Date.now()
+): UserPlan => {
+  if (!isPaidPlan(existingPlan)) return "free";
+  if (subscription?.plan !== existingPlan) return "free";
+  if (subscription.status === "active") return existingPlan;
+  if (subscription.status !== "cancel_at_period_end") return "free";
+  const periodEnd = typeof subscription.current_period_end === "string" ? Date.parse(subscription.current_period_end) : Number.NaN;
+  return Number.isFinite(periodEnd) && periodEnd > nowMs ? existingPlan : "free";
+};
+
 export const ensureSupabaseUser = async (userId: string, email: string): Promise<PublicUser | null> => {
   const client = getSupabaseAdminClient();
   const normalizedEmail = email.trim().toLowerCase();
@@ -187,7 +203,20 @@ export const ensureSupabaseUser = async (userId: string, email: string): Promise
   const byEmail = await fetchPublicUserByEmailFromSupabase(normalizedEmail);
   if (byEmail) {
     if (byEmail.userId === userId) return byEmail;
-    const { data, error } = await client.from("sva_users").update({ user_id: userId, updated_at: new Date().toISOString() }).ilike("email", normalizedEmail).select("*").single();
+    const subscriptionResult = isPaidPlan(byEmail.plan)
+      ? await client.from("subscriptions").select("plan, status, current_period_end").eq("user_id", byEmail.userId).maybeSingle()
+      : { data: null, error: null };
+    if (subscriptionResult.error) {
+      console.error("[supabase-admin] validate paid email relink:", subscriptionResult.error.message);
+      return null;
+    }
+    const linkedPlan = resolveEmailRelinkPlan(byEmail.plan, subscriptionResult.data);
+    const { data, error } = await client
+      .from("sva_users")
+      .update({ user_id: userId, plan: linkedPlan, updated_at: new Date().toISOString() })
+      .ilike("email", normalizedEmail)
+      .select("*")
+      .single();
     if (error) {
       console.error("[supabase-admin] link auth user:", error.message);
       return null;
@@ -195,7 +224,7 @@ export const ensureSupabaseUser = async (userId: string, email: string): Promise
     return mapPublicUserRow(data as Row);
   }
 
-  const plan: UserPlan = normalizedEmail === "mohammed.ameeduzzama@gmail.com" ? "ultra" : "free";
+  const plan: UserPlan = "free";
   const planConfig = getSvaPlan(plan);
   const now = new Date().toISOString();
   const { data, error } = await client.from("sva_users").insert({
@@ -214,6 +243,26 @@ export const ensureSupabaseUser = async (userId: string, email: string): Promise
   }).select("*").single();
   if (error) {
     console.error("[supabase-admin] create auth user:", error.message);
+    return null;
+  }
+  const balanceResult = await client.from("usage_balances").upsert(
+    {
+      user_id: userId,
+      plan: "free",
+      daily_limit: planConfig.dailyVerificationLimit,
+      daily_used: 0,
+      monthly_limit: planConfig.monthlyVerificationLimit,
+      monthly_used: 0,
+      daily_reset_at: nextResetAt("free"),
+      billing_period_start: now,
+      billing_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      active_verifications: 0,
+      updated_at: now
+    },
+    { onConflict: "user_id" }
+  );
+  if (balanceResult.error) {
+    console.error("[supabase-admin] initialize free usage balance:", balanceResult.error.message);
     return null;
   }
   return mapPublicUserRow(data as Row);

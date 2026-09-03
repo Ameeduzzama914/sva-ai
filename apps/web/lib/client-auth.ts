@@ -14,11 +14,6 @@ const USERS_KEY = "sva_users";
 const PLAN_INTENT_KEY = "sva_plan_intent";
 const USAGE_KEY = "sva_usage";
 
-const FOUNDER_EMAIL = "mohammed.ameeduzzama@gmail.com";
-
-const isFounderEmail = (email?: string | null) =>
-  email?.toLowerCase() === FOUNDER_EMAIL;
-
 const isUserPlan = (value: unknown): value is UserPlan => value === "free" || value === "pro" || value === "ultra";
 
 export const getSession = (): ClientSession | null => {
@@ -28,15 +23,9 @@ export const getSession = (): ClientSession | null => {
   try {
     const parsed = JSON.parse(raw) as Partial<ClientSession>;
     if (!parsed.email) return null;
-    const parsedPlan = isUserPlan(parsed.plan) ? parsed.plan : "free";
-    const plan = isFounderEmail(parsed.email)
-  ? "ultra"
-  : parsedPlan === "free" || parsed.planVerified
-    ? parsedPlan
-    : "free";
     return {
       email: parsed.email,
-      plan,
+      plan: "free",
       createdAt: parsed.createdAt ?? new Date().toISOString(),
       planVerified: Boolean(parsed.planVerified)
     };
@@ -59,7 +48,7 @@ export const clearPlanIntent = () => localStorage.removeItem(PLAN_INTENT_KEY);
 export const signupUser = (email: string, password: string): { ok: boolean; message?: string } => {
   const users = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as Array<{ email: string; password: string; plan: UserPlan }>;
   if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: "Account already exists." };
-  users.push({ email, password, plan: getSession()?.plan ?? "free" });
+  users.push({ email, password, plan: "free" });
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
   return { ok: true };
 };
@@ -70,7 +59,7 @@ export const loginUser = (email: string, password: string): { ok: boolean; plan?
  return user
   ? {
       ok: true,
-      plan: isFounderEmail(email) ? "ultra" : user.plan
+      plan: "free"
     }
   : {
       ok: false,

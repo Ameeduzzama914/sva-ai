@@ -877,9 +877,9 @@ export const SaasDashboard = () => {
           return;
         }
       } catch {
-        /* keep local fallback */
+        /* Paid access is resolved only by the server. */
       }
-      setDisplayPlan(session?.plan ?? "free");
+      setDisplayPlan("free");
     };
     void syncPlan();
   }, [session?.email, session?.plan]);
