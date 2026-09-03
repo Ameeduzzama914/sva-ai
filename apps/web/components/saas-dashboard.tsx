@@ -3,6 +3,7 @@
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { ProviderLogo } from "./provider-logo";
@@ -237,9 +238,14 @@ const AppNavigation = ({
   return (
     <aside className="hidden min-h-screen w-[292px] shrink-0 border-r border-white/[0.07] bg-[#05070A]/95 px-4 py-5 lg:block">
       <Link href="/" aria-label="Go to SVA home" className="flex items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50">
-        <div className="grid h-11 w-11 place-items-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-sm font-semibold text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.12)]">
-          SVA
-        </div>
+        <Image
+          src="/sva-logo.png"
+          alt="SVA logo"
+          width={44}
+          height={44}
+          className="h-11 w-11 shrink-0 rounded-2xl object-cover shadow-[0_0_30px_rgba(16,185,129,0.12)]"
+          priority
+        />
         <div>
           <p className="text-lg font-semibold text-white">SVA</p>
           <p className="text-xs text-slate-500">Super Verified AI</p>
@@ -334,9 +340,14 @@ const MobileAppBar = ({
 }) => (
   <div className="sticky top-0 z-30 -mx-3 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-[#05070A]/95 px-3 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:hidden">
     <Link href="/" aria-label="Go to SVA home" className="flex items-center gap-2 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/50">
-      <div className="grid h-9 w-9 place-items-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-xs font-semibold text-emerald-100">
-        SVA
-      </div>
+      <Image
+        src="/sva-logo.png"
+        alt="SVA logo"
+        width={36}
+        height={36}
+        className="h-9 w-9 shrink-0 rounded-2xl object-cover"
+        priority
+      />
       <div>
         <p className="text-sm font-semibold text-white">SVA</p>
         <p className="text-[11px] text-slate-500">{plan.toUpperCase()} plan</p>
