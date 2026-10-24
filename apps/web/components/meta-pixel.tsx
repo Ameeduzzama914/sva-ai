@@ -3,11 +3,12 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { META_CONSENT_EVENT, META_CONSENT_KEY, META_PIXEL_ID, flushMetaCompleteRegistration, hasMetaConsent, setMetaConsent, shouldTrackMetaPageView } from "../lib/meta-pixel";
+import { META_CONSENT_EVENT, META_CONSENT_KEY, META_PIXEL_ID, flushMetaCompleteRegistration, getMetaPageViewKey, hasMetaConsent, setMetaConsent, shouldSendMetaPageView } from "../lib/meta-pixel";
 
 const MetaPixelTracker = () => {
   const pathname = usePathname();
   const [consent, setConsent] = useState<"unknown" | "granted" | "denied">("unknown");
+  const [bootstrapReady, setBootstrapReady] = useState(false);
   const [pixelReady, setPixelReady] = useState(false);
   const lastPageView = useRef<string | null>(null);
 
@@ -20,8 +21,9 @@ const MetaPixelTracker = () => {
   }, []);
 
   useEffect(() => {
-    if (!pixelReady || !hasMetaConsent() || !shouldTrackMetaPageView(pathname) || typeof window.fbq !== "function" || lastPageView.current === pathname) return;
-    lastPageView.current = pathname;
+    const search = window.location.search;
+    if (!shouldSendMetaPageView({ consentGranted: hasMetaConsent(), pixelReady, pathname, search, lastPageView: lastPageView.current }) || typeof window.fbq !== "function") return;
+    lastPageView.current = getMetaPageViewKey(pathname, search);
     window.fbq("track", "PageView");
   }, [pathname, pixelReady]);
 
@@ -38,14 +40,21 @@ const MetaPixelTracker = () => {
   return (
     <>
       {consent === "granted" ? (
-        <Script id="meta-pixel" strategy="afterInteractive" onReady={() => setPixelReady(true)}>{`
-          !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+        <Script id="meta-pixel-bootstrap" strategy="afterInteractive" onReady={() => setBootstrapReady(true)}>{`
+          !function(f,n){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
           n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
-          n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
-          t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
-          (window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+          n.push=n;n.loaded=!0;n.version='2.0';n.queue=[]}(window);
           fbq('init','${META_PIXEL_ID}');
         `}</Script>
+      ) : null}
+      {consent === "granted" && bootstrapReady ? (
+        <Script
+          id="meta-pixel-library"
+          src="https://connect.facebook.net/en_US/fbevents.js"
+          strategy="afterInteractive"
+          onLoad={() => setPixelReady(true)}
+          onReady={() => setPixelReady(true)}
+        />
       ) : null}
       {consent === "unknown" ? (
         <aside className="fixed bottom-4 left-4 right-4 z-[100] mx-auto max-w-2xl rounded-xl border border-white/10 bg-[#0b0e14]/95 p-4 text-sm text-slate-200 shadow-2xl backdrop-blur" aria-label="Analytics cookie consent">

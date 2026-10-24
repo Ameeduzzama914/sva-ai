@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import ts from "typescript";
+import vm from "node:vm";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -14,17 +16,47 @@ const oauthCallback = read("app/auth/callback/page.tsx");
 const oauthSession = read("app/api/auth/oauth/session/route.ts");
 const supabaseAdmin = read("lib/server/supabase-admin.ts");
 
+const compilePixelClient = (windowValue) => {
+  const compiled = ts.transpileModule(pixelClient, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(`(function (module, exports) { ${compiled}\n})`, { window: windowValue, CustomEvent: class CustomEvent {} })(module, module.exports);
+  return module.exports;
+};
+
 test("Meta Pixel is rooted once and loads only after explicit consent", () => {
   assert.match(layout, /<MetaPixel \/>/);
   assert.match(pixel, /consent === "granted"/);
   assert.match(pixel, /strategy="afterInteractive"/);
+  assert.match(pixel, /id="meta-pixel-library"/);
+  assert.match(pixel, /onLoad=\{\(\) => setPixelReady\(true\)\}/);
   assert.match(pixelClient, /1993876124619806/);
 });
 
-test("PageView tracks URL changes with a duplicate guard", () => {
+test("consent rejection prevents PageView before the Meta library is ready", () => {
+  const { shouldSendMetaPageView } = compilePixelClient({ location: { pathname: "/", search: "" } });
+  assert.equal(shouldSendMetaPageView({ consentGranted: false, pixelReady: true, pathname: "/", search: "", lastPageView: null }), false);
+  assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: false, pathname: "/", search: "", lastPageView: null }), false);
+});
+
+test("consent approval enables one PageView after the real library load", () => {
+  const { shouldSendMetaPageView } = compilePixelClient({ location: { pathname: "/", search: "" } });
+  assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: true, pathname: "/", search: "", lastPageView: null }), true);
+  assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: true, pathname: "/", search: "", lastPageView: "/" }), false);
+});
+
+test("persisted approval sends PageView after refresh and navigation without duplicates", () => {
+  const { shouldSendMetaPageView } = compilePixelClient({ location: { pathname: "/", search: "" } });
+  assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: true, pathname: "/", search: "", lastPageView: null }), true);
+  assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: true, pathname: "/pricing", search: "", lastPageView: "/" }), true);
+  assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: true, pathname: "/pricing", search: "", lastPageView: "/pricing" }), false);
+});
+
+test("PageView waits for library readiness and tracks URL changes with a duplicate guard", () => {
   assert.match(pixel, /usePathname\(\)/);
-  assert.match(pixel, /shouldTrackMetaPageView\(pathname\)/);
-  assert.match(pixel, /lastPageView\.current === pathname/);
+  assert.match(pixel, /shouldSendMetaPageView/);
+  assert.match(pixel, /getMetaPageViewKey/);
   assert.match(pixel, /window\.fbq\("track", "PageView"\)/);
 });
 

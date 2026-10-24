@@ -42,6 +42,22 @@ export const setMetaConsent = (granted: boolean): void => {
 export const shouldTrackMetaPageView = (pathname: string): boolean =>
   PUBLIC_PAGEVIEW_PATHS.has(pathname) && typeof window !== "undefined" && window.location.search === "";
 
+export type MetaPageViewState = {
+  consentGranted: boolean;
+  pixelReady: boolean;
+  pathname: string;
+  search: string;
+  lastPageView: string | null;
+};
+
+export const getMetaPageViewKey = (pathname: string, search: string): string | null =>
+  PUBLIC_PAGEVIEW_PATHS.has(pathname) && search === "" ? pathname : null;
+
+export const shouldSendMetaPageView = ({ consentGranted, pixelReady, pathname, search, lastPageView }: MetaPageViewState): boolean => {
+  const pageViewKey = getMetaPageViewKey(pathname, search);
+  return consentGranted && pixelReady && pageViewKey !== null && lastPageView !== pageViewKey;
+};
+
 const isSafeConversionLocation = (event: "CompleteRegistration" | "Purchase"): boolean => {
   if (typeof window === "undefined" || window.location.search !== "") return false;
   if (event === "CompleteRegistration") return window.location.pathname === "/app" || window.location.pathname === "/billing";
