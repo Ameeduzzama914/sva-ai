@@ -8,6 +8,7 @@ import { PublicFooter } from "../../components/public-shell";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { clearPlanIntent, getPlanIntent, setSession } from "../../lib/client-auth";
+import { trackMetaEvent } from "../../lib/meta-pixel";
 import type { UserPlan } from "../../lib/server/store";
 
 type VerifyResponse = { ok: boolean; message?: string; user?: { email: string; plan: UserPlan; createdAt: string } };
@@ -46,6 +47,10 @@ const VerificationInner = () => {
     const intent = getPlanIntent();
     setSession({ email: user.email, plan: user.plan, createdAt: user.createdAt, planVerified: user.plan !== "free" });
     sessionStorage.removeItem("sva_pending_verification_email");
+    if (sessionStorage.getItem("sva_meta_registration_tracked") !== "1") {
+      trackMetaEvent("CompleteRegistration", { content_name: "SVA account" });
+      sessionStorage.setItem("sva_meta_registration_tracked", "1");
+    }
     setSuccess(true);
     window.setTimeout(() => {
       if (intent === "pro" || intent === "ultra") {

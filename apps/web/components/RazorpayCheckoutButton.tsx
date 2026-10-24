@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getSession, getSessionHeaders, setPlanIntent, setSession } from "../lib/client-auth";
+import { trackMetaEvent } from "../lib/meta-pixel";
 import { SVA_PLANS } from "../lib/plans";
 import type { UserPlan } from "../lib/server/store";
 import { Button } from "./ui/button";
@@ -152,6 +153,8 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
       }
 
       const createdOrderId = order.order_id;
+      const verifiedOrderAmount = order.amount;
+      const verifiedOrderCurrency = order.currency;
       let paymentSettled = false;
       const checkout = new window.Razorpay({
         key: order.key_id,
@@ -195,6 +198,15 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
               createdAt: verified.user.createdAt,
               planVerified: verified.user.plan !== "free"
             });
+            const purchaseGuard = `sva_meta_purchase_${paymentResponse.razorpay_payment_id}`;
+            if (sessionStorage.getItem(purchaseGuard) !== "1") {
+              trackMetaEvent("Purchase", {
+                value: verifiedOrderAmount / 100,
+                currency: verifiedOrderCurrency,
+                content_name: plan === "pro" ? "SVA Pro" : "SVA Ultra"
+              });
+              sessionStorage.setItem(purchaseGuard, "1");
+            }
             onSuccess?.(verified.user.plan, verified.message ?? `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`);
           } catch {
             fail("Payment verification failed due to a network error. No plan change was made.");

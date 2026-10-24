@@ -1,3 +1,4 @@
+import { MetaPixel } from "../components/meta-pixel";
 import type { Metadata } from "next";
 import "./styles.css";
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><MetaPixel />{children}</body>
     </html>
   );
 }
