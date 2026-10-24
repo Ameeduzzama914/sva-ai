@@ -193,16 +193,16 @@ export const resolveEmailRelinkPlan = (
   return Number.isFinite(periodEnd) && periodEnd > nowMs ? existingPlan : "free";
 };
 
-export const ensureSupabaseUser = async (userId: string, email: string): Promise<PublicUser | null> => {
+export const ensureSupabaseUserWithStatus = async (userId: string, email: string): Promise<{ user: PublicUser; created: boolean } | null> => {
   const client = getSupabaseAdminClient();
   const normalizedEmail = email.trim().toLowerCase();
   if (!client || !userId || !normalizedEmail) return null;
 
   const byId = await fetchPublicUserByIdFromSupabase(userId);
-  if (byId) return byId;
+  if (byId) return { user: byId, created: false };
   const byEmail = await fetchPublicUserByEmailFromSupabase(normalizedEmail);
   if (byEmail) {
-    if (byEmail.userId === userId) return byEmail;
+    if (byEmail.userId === userId) return { user: byEmail, created: false };
     const subscriptionResult = isPaidPlan(byEmail.plan)
       ? await client.from("subscriptions").select("plan, status, current_period_end").eq("user_id", byEmail.userId).maybeSingle()
       : { data: null, error: null };
@@ -221,7 +221,8 @@ export const ensureSupabaseUser = async (userId: string, email: string): Promise
       console.error("[supabase-admin] link auth user:", error.message);
       return null;
     }
-    return mapPublicUserRow(data as Row);
+    const linkedUser = mapPublicUserRow(data as Row);
+    return linkedUser ? { user: linkedUser, created: false } : null;
   }
 
   const plan: UserPlan = "free";
@@ -265,8 +266,12 @@ export const ensureSupabaseUser = async (userId: string, email: string): Promise
     console.error("[supabase-admin] initialize free usage balance:", balanceResult.error.message);
     return null;
   }
-  return mapPublicUserRow(data as Row);
+  const createdUser = mapPublicUserRow(data as Row);
+  return createdUser ? { user: createdUser, created: true } : null;
 };
+
+export const ensureSupabaseUser = async (userId: string, email: string): Promise<PublicUser | null> =>
+  (await ensureSupabaseUserWithStatus(userId, email))?.user ?? null;
 
 export const updateSupabaseUserPlanByEmail = async (email: string, plan: UserPlan): Promise<PublicUser | null> => {
   const client = getSupabaseAdminClient();

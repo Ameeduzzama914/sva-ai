@@ -199,12 +199,11 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
               planVerified: verified.user.plan !== "free"
             });
             const purchaseGuard = `sva_meta_purchase_${paymentResponse.razorpay_payment_id}`;
-            if (sessionStorage.getItem(purchaseGuard) !== "1") {
-              trackMetaEvent("Purchase", {
+            if (sessionStorage.getItem(purchaseGuard) !== "1" && trackMetaEvent("Purchase", {
                 value: verifiedOrderAmount / 100,
                 currency: verifiedOrderCurrency,
                 content_name: plan === "pro" ? "SVA Pro" : "SVA Ultra"
-              });
+              })) {
               sessionStorage.setItem(purchaseGuard, "1");
             }
             onSuccess?.(verified.user.plan, verified.message ?? `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`);

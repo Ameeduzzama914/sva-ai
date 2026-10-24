@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { setAuthCookie } from "../../../../../lib/server/auth";
-import { ensureSupabaseUser } from "../../../../../lib/server/supabase-admin";
+import { ensureSupabaseUserWithStatus } from "../../../../../lib/server/supabase-admin";
 import { getSupabaseAuthClient, isSupabaseEmailVerified } from "../../../../../lib/server/supabase-auth";
 import { trackEvent } from "../../../../../lib/server/store";
 
@@ -20,11 +20,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Google authentication could not be verified." }, { status: 401 });
   }
 
-  const user = await ensureSupabaseUser(authUser.id, authUser.email);
-  if (!user) return NextResponse.json({ ok: false, message: "Unable to open your SVA account." }, { status: 500 });
+  const ensured = await ensureSupabaseUserWithStatus(authUser.id, authUser.email);
+  if (!ensured) return NextResponse.json({ ok: false, message: "Unable to open your SVA account." }, { status: 500 });
+  const { user } = ensured;
 
   await trackEvent("login", user.userId);
-  const response = NextResponse.json({ ok: true, user });
+  const response = NextResponse.json({ ok: true, user, registrationCompleted: ensured.created });
   setAuthCookie(response, authUser.id);
   return response;
 }

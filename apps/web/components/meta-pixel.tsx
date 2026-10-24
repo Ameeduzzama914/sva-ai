@@ -1,17 +1,15 @@
 "use client";
 
 import Script from "next/script";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { META_CONSENT_EVENT, META_CONSENT_KEY, META_PIXEL_ID, hasMetaConsent, setMetaConsent } from "../lib/meta-pixel";
+import { META_CONSENT_EVENT, META_CONSENT_KEY, META_PIXEL_ID, flushMetaCompleteRegistration, hasMetaConsent, setMetaConsent, shouldTrackMetaPageView } from "../lib/meta-pixel";
 
 const MetaPixelTracker = () => {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [consent, setConsent] = useState<"unknown" | "granted" | "denied">("unknown");
   const [pixelReady, setPixelReady] = useState(false);
   const lastPageView = useRef<string | null>(null);
-  const url = `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
 
   useEffect(() => {
     const stored = window.localStorage.getItem(META_CONSENT_KEY);
@@ -22,10 +20,15 @@ const MetaPixelTracker = () => {
   }, []);
 
   useEffect(() => {
-    if (!pixelReady || !hasMetaConsent() || typeof window.fbq !== "function" || lastPageView.current === url) return;
-    lastPageView.current = url;
+    if (!pixelReady || !hasMetaConsent() || !shouldTrackMetaPageView(pathname) || typeof window.fbq !== "function" || lastPageView.current === pathname) return;
+    lastPageView.current = pathname;
     window.fbq("track", "PageView");
-  }, [pixelReady, url]);
+  }, [pathname, pixelReady]);
+
+  useEffect(() => {
+    if (!pixelReady) return;
+    flushMetaCompleteRegistration();
+  }, [pathname, pixelReady]);
 
   const chooseConsent = (granted: boolean) => {
     setMetaConsent(granted);
