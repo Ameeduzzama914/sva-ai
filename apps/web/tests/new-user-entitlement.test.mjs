@@ -51,7 +51,7 @@ test("valid cancellation-at-period-end access is preserved only before period ex
 });
 
 test("new OAuth and email-password users enter the same durable Free initializer", () => {
-  assert.match(oauthRoute, /ensureSupabaseUser\(authUser\.id, authUser\.email\)/);
+  assert.match(oauthRoute, /ensureSupabaseUserWithStatus\(authUser\.id, authUser\.email\)/);
   assert.match(loginRoute, /ensureSupabaseUser\(supabaseLogin\.user\.id, email\)/);
   assert.match(supabaseAdminSource, /const plan: UserPlan = "free"/);
   assert.match(supabaseAdminSource, /user_id: userId,[\s\S]*?plan,[\s\S]*?credits_remaining: planConfig\.dailyVerificationLimit/);

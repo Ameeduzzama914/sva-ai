@@ -41,7 +41,8 @@ test("OAuth callback validates the Supabase token server-side before creating an
   assert.match(callbackPage, /\/api\/auth\/oauth\/session/);
   assert.match(sessionRoute, /auth\.getUser\(accessToken\)/);
   assert.match(sessionRoute, /isSupabaseEmailVerified\(authUser\)/);
-  assert.match(sessionRoute, /ensureSupabaseUser\(authUser\.id, authUser\.email\)/);
+  assert.match(sessionRoute, /ensureSupabaseUserWithStatus\(authUser\.id, authUser\.email\)/);
+  assert.match(sessionRoute, /registrationCompleted: ensured\.created/);
   assert.match(sessionRoute, /setAuthCookie\(response, authUser\.id\)/);
 });
 

@@ -153,8 +153,6 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
       }
 
       const createdOrderId = order.order_id;
-      const verifiedOrderAmount = order.amount;
-      const verifiedOrderCurrency = order.currency;
       let paymentSettled = false;
       const checkout = new window.Razorpay({
         key: order.key_id,
@@ -185,9 +183,10 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
               ok?: boolean;
               message?: string;
               user?: { email: string; plan: UserPlan; createdAt: string };
+              payment?: { amountPaise: number; currency: string };
             };
 
-            if (!verifyResponse.ok || !verified.ok || !verified.user) {
+            if (!verifyResponse.ok || !verified.ok || !verified.user || !verified.payment || !Number.isInteger(verified.payment.amountPaise) || verified.payment.amountPaise <= 0 || verified.payment.currency !== "INR") {
               fail(verified.message ?? "Payment verification failed. No plan change was made.");
               return;
             }
@@ -199,12 +198,11 @@ export const RazorpayCheckoutButton = ({ plan, className, label, onSuccess, onFa
               planVerified: verified.user.plan !== "free"
             });
             const purchaseGuard = `sva_meta_purchase_${paymentResponse.razorpay_payment_id}`;
-            if (sessionStorage.getItem(purchaseGuard) !== "1") {
-              trackMetaEvent("Purchase", {
-                value: verifiedOrderAmount / 100,
-                currency: verifiedOrderCurrency,
+            if (sessionStorage.getItem(purchaseGuard) !== "1" && trackMetaEvent("Purchase", {
+                value: verified.payment.amountPaise / 100,
+                currency: verified.payment.currency,
                 content_name: plan === "pro" ? "SVA Pro" : "SVA Ultra"
-              });
+              })) {
               sessionStorage.setItem(purchaseGuard, "1");
             }
             onSuccess?.(verified.user.plan, verified.message ?? `Payment successful. Your ${plan === "pro" ? "SVA Pro" : "SVA Ultra"} plan is now active.`);

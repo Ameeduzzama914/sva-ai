@@ -7,9 +7,10 @@ import { PublicFooter } from "../../../components/public-shell";
 import { Card } from "../../../components/ui/card";
 import { clearPlanIntent, getPlanIntent, setSession } from "../../../lib/client-auth";
 import { getSupabaseBrowserClient } from "../../../lib/supabase-browser";
+import { queueMetaCompleteRegistration } from "../../../lib/meta-pixel";
 import type { UserPlan } from "../../../lib/server/store";
 
-type SessionResponse = { ok: boolean; message?: string; user?: { email: string; plan: UserPlan; createdAt: string } };
+type SessionResponse = { ok: boolean; message?: string; registrationCompleted?: boolean; user?: { email: string; plan: UserPlan; createdAt: string } };
 
 export default function OAuthCallbackPage() {
   const router = useRouter();
@@ -41,6 +42,7 @@ export default function OAuthCallbackPage() {
         createdAt: data.user.createdAt,
         planVerified: data.user.plan !== "free"
       });
+      if (data.registrationCompleted) queueMetaCompleteRegistration();
 
       const intent = getPlanIntent();
       clearPlanIntent();
