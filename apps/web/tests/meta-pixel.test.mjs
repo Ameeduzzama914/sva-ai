@@ -12,6 +12,7 @@ const pixelClient = read("lib/meta-pixel.ts");
 const layout = read("app/layout.tsx");
 const verification = read("app/verify-email/page.tsx");
 const checkout = read("components/RazorpayCheckoutButton.tsx");
+const paymentVerification = read("app/api/payments/razorpay/verify/route.ts");
 const oauthCallback = read("app/auth/callback/page.tsx");
 const oauthSession = read("app/api/auth/oauth/session/route.ts");
 const supabaseAdmin = read("lib/server/supabase-admin.ts");
@@ -53,6 +54,26 @@ test("persisted approval sends PageView after refresh and navigation without dup
   assert.equal(shouldSendMetaPageView({ consentGranted: true, pixelReady: true, pathname: "/pricing", search: "", lastPageView: "/pricing" }), false);
 });
 
+test("consent withdrawal blocks later page views and conversions", () => {
+  const localStorage = new Map([["sva_meta_analytics_consent", "granted"]]);
+  const calls = [];
+  const windowValue = {
+    location: { pathname: "/pricing", search: "" },
+    localStorage: {
+      getItem: (key) => localStorage.get(key) ?? null,
+      setItem: (key, value) => localStorage.set(key, value)
+    },
+    dispatchEvent: () => {},
+    fbq: (...args) => calls.push(args)
+  };
+  const { setMetaConsent, shouldSendMetaPageView, trackMetaEvent } = compilePixelClient(windowValue);
+  setMetaConsent(false);
+  assert.equal(localStorage.get("sva_meta_analytics_consent"), "denied");
+  assert.equal(shouldSendMetaPageView({ consentGranted: false, pixelReady: true, pathname: "/pricing", search: "", lastPageView: null }), false);
+  assert.equal(trackMetaEvent("Purchase", { value: 799, currency: "INR" }), false);
+  assert.equal(calls.length, 0);
+});
+
 test("PageView waits for library readiness and tracks URL changes with a duplicate guard", () => {
   assert.match(pixel, /usePathname\(\)/);
   assert.match(pixel, /shouldSendMetaPageView/);
@@ -67,6 +88,9 @@ test("PageView excludes private and query-bearing routes", () => {
     const pageViewAllowlist = pixelClient.slice(pixelClient.indexOf("PUBLIC_PAGEVIEW_PATHS"), pixelClient.indexOf("]);", pixelClient.indexOf("PUBLIC_PAGEVIEW_PATHS")));
     assert.doesNotMatch(pageViewAllowlist, new RegExp(`"${privateRoute}"`));
   }
+  const { getMetaPageViewKey } = compilePixelClient({ location: { pathname: "/pricing", search: "?email=private@example.com" } });
+  assert.equal(getMetaPageViewKey("/pricing", "?email=private@example.com"), null);
+  assert.equal(getMetaPageViewKey("/pricing", ""), "/pricing");
 });
 
 test("registration tracks only after successful OTP verification", () => {
@@ -88,8 +112,10 @@ test("purchase tracks only after verified payment success and excludes sensitive
   assert.ok(checkout.indexOf("!verifyResponse.ok || !verified.ok || !verified.user") < checkout.indexOf('trackMetaEvent("Purchase"'));
   const eventBlock = checkout.slice(checkout.indexOf('trackMetaEvent("Purchase"'), checkout.indexOf("onSuccess?.", checkout.indexOf('trackMetaEvent("Purchase"')));
   assert.doesNotMatch(eventBlock, /email|password|razorpay_payment_id|razorpay_order_id|signature|prompt|response/i);
-  assert.match(eventBlock, /value: verifiedOrderAmount \/ 100/);
-  assert.match(eventBlock, /currency: verifiedOrderCurrency/);
+  assert.match(paymentVerification, /payment: \{ amountPaise: validatedAmount, currency: "INR" \}/);
+  assert.match(checkout, /verified\.payment\.currency !== "INR"/);
+  assert.match(eventBlock, /value: verified\.payment\.amountPaise \/ 100/);
+  assert.match(eventBlock, /currency: verified\.payment\.currency/);
   assert.match(checkout, /&& trackMetaEvent\("Purchase"/);
 });
 

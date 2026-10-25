@@ -121,5 +121,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: activation.message }, { status: activation.status });
   }
 
-  return NextResponse.json({ ok: true, user: activation.user, message: activation.message });
+  return NextResponse.json({
+    ok: true,
+    user: activation.user,
+    payment: { amountPaise: validatedAmount, currency: "INR" },
+    message: activation.message
+  });
 }
